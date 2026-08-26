@@ -26,10 +26,10 @@
 
     <!-- Módulos del reactor: "mvn install" desde la raíz construye todos en el orden correcto -->
     <modules>
-        <module>Engine-Commons</module>
+        <module>Commons-Engine</module>
         <module>CAH-Engine</module>
         <module>SH-Engine</module>
-        <module>TelegramBotUtils</module>
+        <module>Commons-Telegram</module>
         <module>CAH-Telegram</module>
     </modules>
 
@@ -62,7 +62,7 @@
                  Los módulos de este reactor pueden depender de ellos sin repetir <version>. -->
             <dependency>
                 <groupId>org.themarioga</groupId>
-                <artifactId>engine-commons</artifactId>
+                <artifactId>commons-engine</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -77,7 +77,7 @@
             </dependency>
             <dependency>
                 <groupId>org.themarioga</groupId>
-                <artifactId>TelegramBotUtils</artifactId>
+                <artifactId>commons-telegram</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

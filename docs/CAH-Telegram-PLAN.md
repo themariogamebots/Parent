@@ -1,7 +1,7 @@
 # Plan de implementación: CAH-Telegram
 
 > Proyecto nuevo `CAH-Telegram`: capa de presentación/entrada de Telegram sobre `CAH-Engine`.
-> Parent: `org.themarioga:parent:2.0.0` (el BOM del reactor). Dependencias: `TelegramBotUtils` + `cah-engine`.
+> Parent: `org.themarioga:parent:2.0.0` (el BOM del reactor). Dependencias: `Commons-Telegram` + `cah-engine`.
 > Fecha: 2026-08-26 · Decisiones de diseño: **cerradas** (§3)
 
 ---
@@ -10,7 +10,7 @@
 
 Construir la **implementación Telegram** del juego CAH, sabiendo que **no será la única** (habrá otras
 plataformas: web, Discord…). Todo lo que no sea específico de CAH queda reutilizable en
-`TelegramBotUtils`, para que `SH-Telegram` lo aproveche cuando exista.
+`Commons-Telegram`, para que `SH-Telegram` lo aproveche cuando exista.
 
 El proyecto contiene **dos bots** (los dos que hoy viven en `Bots/`):
 
@@ -33,14 +33,14 @@ preparado el terreno común).
 
 ### 2.1 Lo que se reutiliza tal cual
 
-- **`Engine-Commons`** — `User`, `Room`, `Lang`, `UserService`, `RoomService`, `I18NService`,
+- **`Commons-Engine`** — `User`, `Room`, `Lang`, `UserService`, `RoomService`, `I18NService`,
   `SecurityUtils`, `UserDetails`, `UserRole`, `AbstractHibernateDao`. PKs `UUID` (`Base`).
 - **`CAH-Engine`** — `CAHService` (fachada de orquestación), `GameService`/`PlayerService`/`RoundService`,
   `DictionaryService`/`CardService`, entidades `Game`/`Round`/`Player`/`PlayedCard`/`Dictionary`/`Card`.
   **Clave:** `CAHServiceImpl` toma el `Room` **por parámetro** y el `User` **de la sesión de seguridad**
   (`SecurityUtils.getUser()`, `CAHServiceImpl.java:479`). Eso define el contrato que la capa de Telegram
   tiene que cumplir.
-- **`TelegramBotUtils`** — `ApplicationService`, `BotService`, `BotMessageService`,
+- **`Commons-Telegram`** — `ApplicationService`, `BotService`, `BotMessageService`,
   `LongPollingBotServiceImpl`, `WebhookBotServiceImpl`, `BotMessageUtils`, `BotCreationUtils`,
   `LetsEncryptConfig`.
 
@@ -52,7 +52,7 @@ preparado el terreno común).
 ### 2.3 Lo que se tira
 
 - `CCLHBotServiceImpl` (1496 l.) y `DictionariesBotServiceImpl` (1684 l.) — vieja interfaz entre lógica
-  de juego y fachada de Telegram, obsoleta tras el refactor de `Engine-Commons`. **Se reescriben**; el
+  de juego y fachada de Telegram, obsoleta tras el refactor de `Commons-Engine`. **Se reescriben**; el
   renderizado de mensajes y teclados se canibaliza (§9.5, §9.6).
 - `TelegramGameServiceImpl` / `TelegramPlayerServiceImpl` — **no compilan** (referencias a
   `gameService`/`tableService`/`GameTypeEnum` inexistentes, variables duplicadas, `TelegramGame.room`
@@ -66,7 +66,7 @@ preparado el terreno común).
    Imposible representar "este grupo ya jugó antes y ahora juega otra partida". Se separa en
    `telegram_room` (permanente) y `telegram_game` (efímera) — §6.
 2. **No había sesión**: cada método recibía `userId` suelto y el engine ya no acepta eso.
-3. **Estaba en `Bots/`**, mezclado con lo que será SH. Ahora: lo genérico a `TelegramBotUtils`, lo de
+3. **Estaba en `Bots/`**, mezclado con lo que será SH. Ahora: lo genérico a `Commons-Telegram`, lo de
    CAH a `CAH-Telegram`.
 4. **`User.name` hacía de identidad y de nombre visible a la vez**, con `UserAlreadyExistsException`
    garantizada en cuanto dos personas se llaman igual. Se resuelve con el split de §3/D2.
@@ -96,7 +96,7 @@ migración en una fase con peso propio: **F2** (§9.2).
 
 | # | Decisión | Resuelto |
 |---|---|---|
-| D1 | La identidad de Telegram (tabla de mapeo, `UserDetails`, utils) vive en **`TelegramBotUtils`**, no en `CAH-Telegram` | ✔ |
+| D1 | La identidad de Telegram (tabla de mapeo, `UserDetails`, utils) vive en **`Commons-Telegram`**, no en `CAH-Telegram` | ✔ |
 | D2 | **`User` se parte en `name` + `username`** | ✔ |
 | D3 | **`Room` se parte igual: `name` + `roomname`** | ✔ |
 | D4 | Se añade **`CAHService.createGame(Room)`** | ✔ |
@@ -105,16 +105,16 @@ migración en una fase con peso propio: **F2** (§9.2).
 | D7 | Registro **solo con `/start`** | ✔ |
 | D8 | **Un único despliegue** con los dos bots | ✔ |
 | D9 | Colisión de `@alias`: **se lo lleva el nuevo dueño** | ✔ |
-| D10 | Paquete de `TelegramBotUtils` → **`org.themarioga.telegram.commons`** | ✔ |
+| D10 | Paquete de `Commons-Telegram` → **`org.themarioga.commons.telegram`** | ✔ |
 | D11 | **`Bots/` sale del reactor ya** (F0) | ✔ |
 
-### D1 — La identidad de Telegram vive en `TelegramBotUtils`
+### D1 — La identidad de Telegram vive en `Commons-Telegram`
 
 La tabla `telegram_user`, el `TelegramUserDetails`, el `TelegramSecurityUtils` y el servicio de
 login/registro son **agnósticos del juego**: sirven igual a CAH que a SH. Solo lo específico de CAH
 (`telegram_room`, `telegram_game`, `telegram_player`, renderizado de cartas) va en `CAH-Telegram`.
 
-Implicación: **`TelegramBotUtils` pasa a depender de `engine-commons`** (hoy no depende). La dirección
+Implicación: **`Commons-Telegram` pasa a depender de `engine-commons`** (hoy no depende). La dirección
 es correcta — `engine-commons` no sabe nada de Telegram — y el parent ya trae
 `spring-boot-starter-data-jpa` a todos los módulos.
 
@@ -207,9 +207,9 @@ Si A libera `@foo` y B lo coge, al conectarse B el `username` `foo` todavía per
 Telegram garantiza un único dueño vivo, así que el estado refleja la realidad. El algoritmo, con el
 orden de `flush` que exige el índice único, está en §7.4.
 
-### D10 — Rename de paquete en `TelegramBotUtils`
+### D10 — Rename de paquete en `Commons-Telegram`
 
-`org.themarioga.game.*` → `org.themarioga.telegram.commons.*`. Es un rename mecánico y su único
+`org.themarioga.game.*` → `org.themarioga.commons.telegram.*`. Es un rename mecánico y su único
 consumidor es `Bots/`, que sale del reactor en F0. Hacerlo **antes** de que exista `SH-Telegram`.
 
 ### D11 — `Bots/` fuera del reactor en F0
@@ -223,7 +223,7 @@ renderizado de mensajes, pero deja de compilarse (cosa que hoy, además, no hace
 
 ```
                         ┌──────────────────────────────────────────┐
-   Telegram Update ───► │ TelegramBotUtils                         │
+   Telegram Update ───► │ Commons-Telegram                         │
                         │  UpdateDispatcher                        │
                         │   └─ AuthUpdateInterceptor ──────────────┼──► telegram_user (mapeo)
                         │        · resuelve TelegramUser           │        │
@@ -255,7 +255,7 @@ qué es Telegram. La traducción `chatId ↔ Room` y `telegramUserId ↔ User` o
 
 ## 5. Reparto por módulo
 
-### 5.1 Cambios en `Engine-Commons` (F1)
+### 5.1 Cambios en `Commons-Engine` (F1)
 
 Radio de impacto verificado: **pequeño**. `UserDaoImpl.getByUsername` ya consulta `u.name` (es cambiar
 una palabra) y el único llamador productivo de la búsqueda de sala por nombre es `CAHServiceImpl:82-84`.
@@ -297,7 +297,7 @@ el split le afecta igual. Cambios aplicados, idénticos a los de CAH:
 > bytecode viejo y fallaba luego en los tests con errores engañosos. **Verificar siempre con
 > `mvn clean install`, no con `mvn install`.**
 
-### 5.3 Nuevo en `TelegramBotUtils` (F3) — genérico, lo hereda SH-Telegram
+### 5.3 Nuevo en `Commons-Telegram` (F3) — genérico, lo hereda SH-Telegram
 
 | Clase | Qué hace |
 |---|---|
@@ -317,7 +317,7 @@ el split le afecta igual. Cambios aplicados, idénticos a los de CAH:
 visible en `User.name`, así que la tabla de mapeo **no los duplica**. Se queda mínima: id de Telegram,
 `user_id`, `language_code`, `last_seen`.
 
-**Arreglos** de paso en `TelegramBotUtils`:
+**Arreglos** de paso en `Commons-Telegram`:
 - Rename de paquete (D10).
 - `pendingReplies` → `ConcurrentHashMap` (en webhook hay varios hilos de Tomcat).
 - `BotMessageUtils.getReceivedCommand` indexa `pendingReplies` por `message.getChatId()` mientras
@@ -348,7 +348,7 @@ visible en `User.name`, así que la tabla de mapeo **no los duplica**. Se queda 
 ## 6. Modelo de datos nuevo
 
 ```
--- Engine-Commons (modificadas)
+-- Commons-Engine (modificadas)
 Users
   id            UUID PK
   username      VARCHAR(64)  NOT NULL UNIQUE   -- NUEVO: identidad ("themarioga" | "tg:123456789")
@@ -364,7 +364,7 @@ Room
   active        BOOLEAN NOT NULL
   creation_date TIMESTAMP NOT NULL
 
--- TelegramBotUtils (compartida CAH/SH)
+-- Commons-Telegram (compartida CAH/SH)
 -- El alias y el nombre visible NO se duplican aquí: viven en Users.username / Users.name
 telegram_user
   id            BIGINT PK                      -- id de usuario de Telegram
@@ -435,7 +435,7 @@ el `User` existe pero está inactivo, `createOrReactivate` lo reactiva solo.
 
 ### 7.3 Sesión por petición (`AuthUpdateInterceptor`)
 
-Una vez por update, antes de despachar el handler, en `TelegramBotUtils`:
+Una vez por update, antes de despachar el handler, en `Commons-Telegram`:
 
 ```java
 try {
@@ -571,7 +571,7 @@ Cada fase deja el reactor **compilando** (`mvn -q install` desde la raíz).
 
 - [x] Sacar `Bots` de `<modules>` del pom raíz (D11). El directorio se queda en disco como referencia.
 - [x] Crear `CAH-Telegram/` + `git init` (cada módulo del reactor tiene su repo).
-- [x] `pom.xml` del módulo: parent `org.themarioga:parent:2.0.0`, dependencias `TelegramBotUtils` +
+- [x] `pom.xml` del módulo: parent `org.themarioga:parent:2.0.0`, dependencias `Commons-Telegram` +
       `cah-engine` + `flyway-core` + `flyway-mysql`; perfiles `dev` (H2) / `pre` / `pro` (driver
       MariaDB, que `Bots/pom.xml` **no declaraba** en ningún perfil).
 - [x] Añadir `<module>CAH-Telegram</module>` al pom raíz.
@@ -590,7 +590,7 @@ Desviaciones respecto a lo planeado:
   `org.springframework.boot.security.autoconfigure`. Es la causa de dos de los errores de compilación
   de `Bots`, y hay que tenerlo presente al migrar `SecurityConfig` en F4.
 
-### F1 — Split de identidad en `Engine-Commons` + `createGame(Room)` (1 jornada) ✅ HECHA
+### F1 — Split de identidad en `Commons-Engine` + `createGame(Room)` (1 jornada) ✅ HECHA
 
 - [x] `User.username` / `Room.roomname` y toda la lista de §5.1.
 - [x] `UserDetails.getUsername()` → `user.getUsername()`; `SecurityUtils.getUsername()`.
@@ -670,9 +670,9 @@ Dos hallazgos bloqueantes descubiertos al arrancar el contexto, ambos para **F4*
    `org.springframework.boot:spring-boot-flyway`: con solo `flyway-core` (que es lo que declaraba
    `Bots`) las migraciones se ignoran en silencio, sin un solo aviso en el log.
 
-### F3 — Identidad y sesión en `TelegramBotUtils` (2 jornadas) ✅ HECHA
+### F3 — Identidad y sesión en `Commons-Telegram` (2 jornadas) ✅ HECHA
 
-- [x] Rename de paquete a `org.themarioga.telegram.commons` (D10), alineando de paso los subpaquetes
+- [x] Rename de paquete a `org.themarioga.commons.telegram` (D10), alineando de paso los subpaquetes
       con la convención del motor (`model`→`models`, `service`→`services`).
 - [x] Dependencia `engine-commons`.
 - [x] `TelegramUser` + DAO con `JOIN FETCH` de `user.lang` (R1).
@@ -727,7 +727,7 @@ Arreglo de paso, no planeado:
 
 Los dos problemas que impedían arrancar, resueltos:
 
-1. **Conflicto de starters** → `TelegramBotsRegistrarConfig` en `TelegramBotUtils` sustituye a las dos
+1. **Conflicto de starters** → `TelegramBotsRegistrarConfig` en `Commons-Telegram` sustituye a las dos
    autoconfiguraciones, que se excluyen con `spring.autoconfigure.exclude`. Se eligió esta opción
    (frente al modo global excluyendo una) tras mirar qué hacían: **son envoltorios triviales**, un
    `@Bean` y un registrador, así que "mantenerlo nosotros" no cuesta prácticamente nada y elimina el
@@ -840,7 +840,7 @@ mínima:** documentarlo; si aparece, añadir `@Version` a `Round`/`Game` y reint
 
 **R7 — Alcance del "100% retrocompatible".** Se mantiene la **interfaz de comandos y callbacks**. El
 texto exacto de los mensajes depende de la tabla `Tag`, cuyo estado tras el refactor de
-`Engine-Commons` es desconocido → auditoría en F5.
+`Commons-Engine` es desconocido → auditoría en F5.
 
 ---
 
@@ -848,10 +848,10 @@ texto exacto de los mensajes depende de la tabla `Tag`, cuyo estado tras el refa
 
 | Módulo | Cambio | Riesgo |
 |---|---|---|
-| `Engine-Commons` | Split `name`/`username` en `User` y `name`/`roomname` en `Room` + APIs y tests (§5.1) | ✅ hecho |
+| `Commons-Engine` | Split `name`/`username` en `User` y `name`/`roomname` en `Room` + APIs y tests (§5.1) | ✅ hecho |
 | `CAH-Engine` | + `createGame(Room)`; adaptación a las firmas nuevas de `RoomService`; fixtures + DTD | ✅ hecho |
 | `SH-Engine` | Lo mismo que CAH: `createGame(Room)`, fixtures + DTD, dos llamadas en tests (§5.2 bis) | ✅ hecho |
-| `TelegramBotUtils` | Rename de paquete; + dependencia `engine-commons`; + identidad/sesión; + `UpdateDispatcher`; arreglos de `pendingReplies` | ✅ hecho |
+| `Commons-Telegram` | Rename de paquete; + dependencia `engine-commons`; + identidad/sesión; + `UpdateDispatcher`; arreglos de `pendingReplies` | ✅ hecho |
 | Pom raíz | − `Bots`, + `CAH-Telegram` (módulo y BOM) | Bajo |
 | `Bots` | Fuera del reactor en F0; se archiva en F8 | — |
 | BD producción | Baseline V3 + migración `BIGINT`→`UUID` + split de `name` | **Alto** — F2, con ensayo sobre backup |

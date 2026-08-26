@@ -1,15 +1,15 @@
-[submodule "Engine-Commons"]
-	path = Engine-Commons
-	url = https://github.com/themarioga/Game-Commons.git
+[submodule "Commons-Engine"]
+	path = Commons-Engine
+	url = https://github.com/themarioga/Commons-Engine.git
 [submodule "CAH-Engine"]
 	path = CAH-Engine
 	url = https://github.com/themarioga/CCLH-Commons.git
-[submodule "TelegramBotUtils"]
-	path = TelegramBotUtils
-	url = https://github.com/themarioga/CCLH-TelegramBotUtils.git
 [submodule "SH-Engine"]
 	path = SH-Engine
 	url = https://github.com/themarioga/SH-Engine.git
+[submodule "Commons-Telegram"]
+	path = Commons-Telegram
+	url = https://github.com/themarioga/Commons-Telegram.git
 [submodule "CAH-Telegram"]
 	path = CAH-Telegram
 	url = https://github.com/themarioga/CAH-Telegram.git

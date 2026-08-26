@@ -9,10 +9,10 @@ como submódulos de git.
 
 | Módulo | Qué es |
 |---|---|
-| `Engine-Commons` | Librería base: `User`, `Room`, `Lang`, i18n, seguridad y DAO genérico de Hibernate |
+| `Commons-Engine` | Librería base: `User`, `Room`, `Lang`, i18n, seguridad y DAO genérico de Hibernate |
 | `CAH-Engine` | Motor de juego de Cartas Contra la Humanidad |
 | `SH-Engine` | Motor de juego de Secret Hitler |
-| `TelegramBotUtils` | Librería común de bots de Telegram: identidad, sesión y despacho de updates |
+| `Commons-Telegram` | Librería común de bots de Telegram: identidad, sesión y despacho de updates |
 | `CAH-Telegram` | Aplicación: los bots de Telegram de CAH (juego y diccionarios) |
 
 ## Clonar
