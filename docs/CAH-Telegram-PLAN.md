@@ -618,9 +618,12 @@ las migraciones viejas. No hay backup de usuarios, ni de colaboradores, ni de pa
       `CAH-Telegram/src/test/java/.../tools/SchemaGenerator.java`, aplicando las mismas naming
       strategies que Spring Boot 4.1 usa en runtime. 17 tablas y 43 claves ajenas. Escribirlo a mano
       con la herencia `TABLE_PER_CLASS` de `Game`/`Player` habría sido pedir problemas.
-- [x] **`V3.0.0_2__Languages_and_tags.sql`**: los 2 idiomas y los **96 tags i18n** (48 es + 48 en,
-      simétricos) recuperados de `V2.0.0_1/_2/_4`, cuyos `INSERT` estaban intactos aunque el DDL que
-      los rodeaba estuviera corrompido. **Esto cierra buena parte de la auditoría i18n de F5.**
+- [x] **`V3.0.0_2__Languages_and_tags.sql`**: los 2 idiomas y los tags i18n recuperados de los
+      `INSERT` de las migraciones `V2.0.0`, que estaban intactos aunque el DDL que los rodeaba
+      estuviera corrompido.
+      > ⚠️ **Corregido en F5**: esta primera recuperación solo miró las migraciones de
+      > `Commons-Engine` y se dejó fuera **134 de los 180** tags que usa el código, que vivían en las
+      > de `CAH-Engine`. Ver F5.
 - [x] **Histórico V1/V2 retirado del classpath** a `<módulo>/docs/legacy-db-migration/` con un README
       que explica por qué. Seguía publicándose dentro de los jars y Flyway lo ejecutaba.
 - [x] **Conversor `CAH-Telegram/tools/legacy_data_migration.py`**: CSV → SQL, para MariaDB y H2.
@@ -761,7 +764,7 @@ Hallazgos y decisiones de la fase:
 ⚠️ Lo que **no** cubren los tests: el registro real contra la API de Telegram (los tests usan tokens
 falsos y el 401 se registra como error), y el modo webhook de punta a punta.
 
-### F5 — Bot de diccionarios (2–3 jornadas)
+### F5 — Bot de diccionarios (2–3 jornadas) 🔶 EN CURSO
 
 Antes que el de juego: solo usa chat privado, no necesita `Room` ni partidas, y valida de punta a punta
 la sesión.
@@ -771,9 +774,21 @@ la sesión.
       renderizado se canibaliza de `DictionariesBotServiceImpl` (1684 l.), sustituyendo el acceso a
       datos por las APIs nuevas y los `long id` por `UUID`.
 - [ ] `ErrorMessageResolver` (`ErrorEnum → tag i18n`), reutilizable por los dos bots.
-- [ ] **Auditoría i18n**: cruzar todos los tags que invocan los dos `ApplicationServiceImpl` contra el
-      contenido real de la tabla `Tag`, y listar/crear los que falten (incluidos los nuevos:
-      `ERROR_USER_NOT_REGISTERED` y compañía).
+- [x] **Auditoría i18n** ✅ — se hizo la primera, porque sin textos no hay nada que portar:
+      - El catálogo pasa de **96 a 366 textos** (183 tags × 2 idiomas, simétricos). Faltaban **134**:
+        la recuperación de F2 solo miró las migraciones de `Commons-Engine`, y los textos del bot de
+        diccionarios estaban en las de `CAH-Engine` (`V2.0.0_2`, `_4` y `_5`). Sin esto, el bot
+        habría enseñado el nombre del tag en crudo en casi todas sus pantallas.
+      - **Cuatro tags** aparecían en las dos fuentes con textos distintos. Se escoge la variante
+        acentuada y la que concuerda con el significado: `ERROR_PLAYER_ALREADY_VOTED_DELETION` decía
+        *"Ya has votado una carta"*, que es de otra cosa (y en inglés, el mismo error).
+      - **Ocho textos son nuevos** porque el código los pedía y no existían en ninguna migración:
+        `UNKNOWN_ERROR` y los tres `COLLABORATOR_ADD_*`, en los dos idiomas.
+      - **Tres tags son erratas del código viejo** (`GAME_ONLY_CREATOR_CAN_DELETE` en vez de
+        `ERROR_GAME_ONLY_CREATOR_CAN_DELETE`, `PLAYER_DOES_NOT_EXISTS` y `DICTIONARY_NOT_PUBLISHED`):
+        al usuario se le enseñaba el nombre del tag. No se añaden; el código nuevo usa el correcto.
+      - Dos tests lo blindan: que estén los textos del bot de diccionarios, y que los dos idiomas
+        tengan el mismo número de tags.
 
 **Aceptación:** flujo manual completo: crear diccionario → añadir cartas → publicar → compartir →
 colaborar.
