@@ -1,0 +1,1 @@
+Este proyecto todo el código necesario para los Bots de Cartas Contra la Humanidad y Secret Hitler

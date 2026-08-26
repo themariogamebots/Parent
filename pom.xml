@@ -1,0 +1,290 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Hereda de Spring Boot -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/> <!-- Usa el parent del repositorio central -->
+    </parent>
+
+    <!-- Datos del parent -->
+    <groupId>org.themarioga</groupId>
+    <artifactId>parent</artifactId>
+    <version>2.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>Parent</name>
+    <description>Parent POM y BOM para los proyectos org.themarioga: gestiona el build compartido
+        (vía herencia de &lt;parent&gt;) y las versiones de los artefactos propios (vía
+        dependencyManagement, importable como BOM) para quien no forme parte de este reactor.</description>
+
+    <!-- Módulos del reactor: "mvn install" desde la raíz construye todos en el orden correcto -->
+    <modules>
+        <module>Engine-Commons</module>
+        <module>CAH-Engine</module>
+        <module>SH-Engine</module>
+        <module>TelegramBotUtils</module>
+        <module>CAH-Telegram</module>
+    </modules>
+
+    <properties>
+        <!-- Dependency versions -->
+        <dbunit.version>3.2.0</dbunit.version>
+        <dbunit.spring.version>1.3.0</dbunit.spring.version>
+        <telegrambots.version>10.0.0</telegrambots.version>
+        <letsencrypt.version>0.5.0</letsencrypt.version>
+
+        <!-- Plugin versions -->
+        <dependencies.plugin.version>12.2.2</dependencies.plugin.version>
+        <jacoco.plugin.version>0.8.15</jacoco.plugin.version>
+        <formatter.plugin.version>2.29.0</formatter.plugin.version>
+
+        <tests.skip>true</tests.skip>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
+    <!-- Dependencias que los hijos pueden heredar -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- BOM: artefactos propios de org.themarioga, versionados junto al reactor.
+                 Los módulos de este reactor pueden depender de ellos sin repetir <version>. -->
+            <dependency>
+                <groupId>org.themarioga</groupId>
+                <artifactId>engine-commons</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.themarioga</groupId>
+                <artifactId>cah-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.themarioga</groupId>
+                <artifactId>sh-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.themarioga</groupId>
+                <artifactId>TelegramBotUtils</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Telegram -->
+            <dependency>
+                <groupId>org.telegram</groupId>
+                <artifactId>telegrambots-springboot-webhook-starter</artifactId>
+                <version>${telegrambots.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.telegram</groupId>
+                <artifactId>telegrambots-springboot-longpolling-starter</artifactId>
+                <version>${telegrambots.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.telegram</groupId>
+                <artifactId>telegrambots-client</artifactId>
+                <version>${telegrambots.version}</version>
+            </dependency>
+
+            <!-- Let's Encrypt -->
+            <dependency>
+                <groupId>com.github.valb3r.letsencrypt-helper</groupId>
+                <artifactId>letsencrypt-helper-tomcat</artifactId>
+                <version>${letsencrypt.version}</version>
+            </dependency>
+
+            <!-- DBUnit override -->
+            <dependency>
+                <groupId>org.dbunit</groupId>
+                <artifactId>dbunit</artifactId>
+                <version>${dbunit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.springtestdbunit</groupId>
+                <artifactId>spring-test-dbunit</artifactId>
+                <version>${dbunit.spring.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- SPRING DEPENDENCIES -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- TEST DEPENDENCIES -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.dbunit</groupId>
+            <artifactId>dbunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.springtestdbunit</groupId>
+            <artifactId>spring-test-dbunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+                <filtering>true</filtering>
+            </testResource>
+        </testResources>
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>net.revelc.code.formatter</groupId>
+                    <artifactId>formatter-maven-plugin</artifactId>
+                    <version>${formatter.plugin.version}</version>
+                    <configuration>
+                        <configFile>${project.basedir}/src/main/resources/default-formatter-config.xml</configFile>
+                        <compilerSource>${java.version}</compilerSource>
+                        <compilerCompliance>${java.version}</compilerCompliance>
+                        <compilerTargetPlatform>${java.version}</compilerTargetPlatform>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>format</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.owasp</groupId>
+                    <artifactId>dependency-check-maven</artifactId>
+                    <version>${dependencies.plugin.version}</version>
+                    <configuration>
+                        <failBuildOnCVSS>8</failBuildOnCVSS>
+                        <suppressionFile>${project.basedir}/src/main/resources/supressed-cve-exceptions.xml</suppressionFile>
+                        <nvdDatafeedUrl>http://127.0.0.1/nvdcve-{0}.json.gz</nvdDatafeedUrl>
+                        <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+                        <ossIndexUsername>${env.OSS_INDEX_USER}</ossIndexUsername>
+                        <ossIndexPassword>${env.OSS_INDEX_PASS}</ossIndexPassword>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <skip>${tests.skip}</skip>
+                        <includes>
+                            <include>**/*Test.java</include>
+                        </includes>
+                        <excludes>
+                            <exclude>**/BaseTest.java</exclude>
+                        </excludes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>test</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco.plugin.version}</version>
+                    <configuration>
+                        <includes>
+                            <include>**/services/**/*.java</include>
+                        </includes>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>check</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>net.revelc.code.formatter</groupId>
+                        <artifactId>formatter-maven-plugin</artifactId>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.owasp</groupId>
+                        <artifactId>dependency-check-maven</artifactId>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>test</id>
+            <properties>
+                <spring.profiles.active>test</spring.profiles.active>
+                <tests.skip>false</tests.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>
