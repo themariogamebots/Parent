@@ -906,10 +906,28 @@ puede agotar el pool porque se atiende un update cada vez; en webhook sí es un 
 justo el modo que no se puede medir todavía. Tocarlo a ciegas cambiaría el orden de los envíos
 respecto al commit sin poder comprobar el efecto.
 
-### F8 — Documentación y cierre
+### F8 — Documentación y cierre ✅ HECHA (salvo la acción en GitHub)
 
-- [ ] `CLAUDE.md` + `docs/CODEBASE_MAP.md` del módulo nuevo, con el formato de `CAH-Engine`.
-- [ ] Archivar el repo de `Bots`.
+- [x] **`CLAUDE.md` + `docs/CODEBASE_MAP.md` de `CAH-Telegram`**, con el formato de `CAH-Engine`. Era
+      el único módulo del reactor sin ninguno de los dos.
+- [x] **Documentación de `Commons-Telegram` reescrita entera.** Era anterior al refactor y describía
+      un módulo que ya no existe: paquete `org.themarioga.game.*`, bots construidos "sobre los
+      starters" (hoy los sustituye `TelegramBotsRegistrarConfig`), estructura `model` → `service/intf`
+      sin rastro de identidad, sesión ni `UpdateDispatcher`, y un aviso sobre unos métodos factoría de
+      `BotCreationUtils` que ya no era cierto. El `README.md` iba con ella: su ejemplo **ya no
+      compilaba** (constructores viejos, `spring.main.allow-circular-references`, inyección por
+      setter, `example.bot.type` en vez de `telegram.bots.type`) y no mencionaba ni el
+      `spring.autoconfigure.exclude` obligatorio ni el endpoint `/callback/{botName}`.
+- [x] **Repaso de los docs de los tres motores**: artefacto `engine-commons` → `commons-engine`; el
+      split `username`/`name` y el `create()` (persist) documentados en `Commons-Engine`; en
+      `CAH-Engine`, las migraciones que ya no viven en `src/main/resources` y el porqué; en los dos
+      motores, la jerarquía de excepciones unificada bajo `ApplicationException` (era la gotcha que
+      dejaba al bot mudo).
+- [x] **Corregido un número que estaba mal en tres sitios.** El resolver de errores decía "37 errores
+      del motor sin texto"; contando enums contra tags son **14**, y son exactamente las validaciones
+      internas que se dejaron a propósito en el genérico. El 37 era de antes de que F6 escribiera los
+      textos que faltaban. Corregido en el javadoc, en el comentario del test y en el mapa.
+- [ ] **Archivar el repo de `Bots`** — acción manual en GitHub, pendiente del usuario.
 
 ---
 
