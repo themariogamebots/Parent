@@ -821,36 +821,56 @@ Decisiones de la fase:
 - El alta recibe el usuario de Telegram completo en vez de tres campos sueltos, porque el alias hace
   falta para la identidad (D2).
 
-### F6 — Bot de juego (4–5 jornadas)
+### F6 — Bot de juego (4–5 jornadas) ✅ HECHA (falta prueba manual)
 
-- [ ] Migrar `CCLHApplicationServiceImpl` **sin cambios**.
-- [ ] `CCLHTelegramServiceImpl` por bloques:
-      1. `/start`, `/lang`, `/help` (comparte código con F5)
-      2. `/create` + menú de configuración (modo, puntuación, diccionario, nº jugadores, rondas/puntos)
-      3. join/leave + arranque + reparto de manos por privado
-      4. ronda: carta negra al grupo, mano por privado, `play_card`, `vote_card`, cierre de ronda,
-         marcador, fin de partida
-      5. borrados: `game_delete_group`, `game_delete_private`, `/deletemygames`,
-         `/deletegamebyusername` (vía `getByUsername` normalizado, D2), `/deleteallgames`
-      6. admin: `/sendmessagetoeveryone`, `/toggleglobalmessages`
-- [ ] Al terminar/borrar partida: limpiar `telegram_game` y `telegram_player`.
+- [x] **`CCLHApplicationServiceImpl` migrado con la interfaz intacta**: 9 comandos y 21 callbacks,
+      verificado por test contra la original. Importa más que en diccionarios: los botones viven
+      dentro de mensajes que Telegram guarda indefinidamente, así que cambiar una clave rompe
+      partidas que ya están en marcha.
+- [x] **`CCLHTelegramServiceImpl`**: de 1496 a 1207 líneas. Creación y configuración, unirse/salir,
+      arranque, ronda completa, borrados y comandos de administración.
+- [x] **Los 22 errores de partida que un jugador puede provocar** ya tienen texto en los dos idiomas.
+- [ ] **Partida completa de 3 jugadores** en un grupo real, en los dos modos de puntuación. Es lo
+      único que ningún test cubre.
 
-Lo que F5 le deja hecho y lo que le deja pendiente:
+Lo propio de este bot, frente al de diccionarios:
 
-- **Hecho**: `ErrorMessageResolver`, `SelectionRegistry` (números cortos), `TelegramAdmins`,
-  `sendMessageWithForceReply`, y el patrón de porte ya rodado (sesión, escritura a otros usuarios,
-  `guarded`).
-- **Pendiente**: los **36 errores de partida sin texto i18n** que detectó la auditoría
-  (`ROUND_*`, `PLAYER_CANNOT_*`, `GAME_*`). Hoy caen al mensaje genérico, que no miente pero tampoco
-  ayuda. Conviene escribirlos al portar cada flujo, no antes.
-- **Ojo**: `CCLHBotServiceImpl` usa `UNKNOWN_ERROR` y dos tags con errata
-  (`GAME_ONLY_CREATOR_CAN_DELETE`, `PLAYER_DOES_NOT_EXISTS`); el nombre correcto lleva `ERROR_`
-  delante.
+- **Dos chats a la vez**: el grupo de la partida y el privado de cada jugador. Cada mensaje que se
+  edita o se borra hay que dirigirlo al correcto, y ninguno de esos identificadores está ya en las
+  entidades del motor (el código anterior usaba `game.getRoom().getId()` y `user.getId()` como si
+  fueran chats, porque antes lo eran).
+- **Envíos asíncronos encadenados** para quedarse con los identificadores de los mensajes. La
+  continuación corre en un hilo del pool, así que la sesión viaja con `TelegramSession`.
+- **`guarded()` elige cómo avisar**: si el update vino de un botón contesta a la pulsación (sin
+  ensuciar el grupo); si vino de un comando, con un mensaje.
 
-**Aceptación:** partida completa de 3 jugadores en un grupo de pruebas, en los dos modos de puntuación.
+Bugs corregidos al portar:
+
+- ⚠️ **En modo clásico y dictadura las cartas para votar se le mandaban al *creador* de la partida.**
+  Quien vota es el **presidente de la ronda**, que rota. Con el modelo anterior coincidían y por eso
+  no se notaba; con el nuevo habría aparecido en la segunda ronda de cada partida.
+- **`/deleteallgames` dejaba de borrar en cuanto una partida fallaba**, porque propagaba la excepción
+  dentro del bucle: una partida en mal estado bloqueaba el borrado de todas las demás.
+- **El botón de borrar del grupo usaba una excepción como flujo de control** (`catch
+  GameNotYoursException` para llegar a la rama de "votar borrado"), lo que escondía la tercera rama:
+  no creador y partida sin empezar.
+- **`TelegramSession`**: el código anterior rehacía la sesión a mano dentro de los callbacks
+  asíncronos pero no la retiraba, así que se quedaba pegada al hilo del pool.
+- Dos textos más en castellano dentro del código pasan a tags, errata incluida ("Desctivados").
+
+Sobre los errores sin texto:
+
+- De los 36 que detectó la auditoría de F5, **22 tienen ya texto propio**: los que un jugador puede
+  provocar de verdad (jugar dos veces, votar su propia carta, pulsar un botón de una ronda que ya
+  pasó, salirse siendo el creador…).
+- Los **14 restantes son validaciones internas** (`USER_EMPTY`, `ROOM_ID_EMPTY`, estados imposibles)
+  y **se dejan a propósito** cayendo al mensaje genérico: si alguna vez afloran, "Ha ocurrido un
+  error inesperado" es mejor que "El usuario no puede ser nulo". Hay un test que fija las dos listas.
 
 ### F7 — Endurecimiento (1–2 jornadas)
 
+- [ ] **Prueba manual de los dos bots**, que es lo que cierra F5 y F6: flujo completo de diccionarios
+      y partida de 3 jugadores en los dos modos de puntuación.
 - [ ] Modo webhook probado (es donde aparece la concurrencia real).
 - [ ] Revisión de transacciones: una por acción de negocio, con las llamadas a la API de Telegram
       **fuera** (R4).
