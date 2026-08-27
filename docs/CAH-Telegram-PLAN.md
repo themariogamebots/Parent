@@ -764,34 +764,62 @@ Hallazgos y decisiones de la fase:
 ⚠️ Lo que **no** cubren los tests: el registro real contra la API de Telegram (los tests usan tokens
 falsos y el 401 se registra como error), y el modo webhook de punta a punta.
 
-### F5 — Bot de diccionarios (2–3 jornadas) 🔶 EN CURSO
+### F5 — Bot de diccionarios (2–3 jornadas) ✅ HECHA (falta prueba manual)
 
-Antes que el de juego: solo usa chat privado, no necesita `Room` ni partidas, y valida de punta a punta
-la sesión.
+- [x] **`DictionariesApplicationServiceImpl` migrado con la interfaz intacta**: 27 comandos y 29
+      callbacks, mismos nombres y misma semántica de `__`. Un test compara la lista contra la
+      original y falla si alguien la toca, así que los botones de los mensajes ya enviados siguen
+      funcionando.
+- [x] **`DictionariesTelegramServiceImpl`** sustituye a `DictionariesBotServiceImpl`: de 1684 a 1222
+      líneas sin perder comportamiento. La reducción viene de que los bloques de cartas blancas y
+      negras eran dos espejos de ~230 líneas cada uno y ahora comparten implementación con el tipo
+      como parámetro, y de que el `ErrorMessageResolver` absorbe las escaleras de `catch`.
+- [x] **`ErrorMessageResolver`** (§ más abajo) y **auditoría i18n** (arriba).
+- [x] **Números cortos en las listas** y **el castellano que quedaba en el código pasa a tags**.
+- [ ] **Probar los flujos a mano** contra un bot real: crear diccionario → añadir cartas → publicar →
+      compartir → colaborar. Es lo único que ningún test cubre.
 
-- [ ] Migrar `DictionariesApplicationServiceImpl` **sin cambios**.
-- [ ] `DictionariesTelegramServiceImpl` (~57 métodos) sobre `DictionaryService`/`CardService`. El
-      renderizado se canibaliza de `DictionariesBotServiceImpl` (1684 l.), sustituyendo el acceso a
-      datos por las APIs nuevas y los `long id` por `UUID`.
-- [ ] `ErrorMessageResolver` (`ErrorEnum → tag i18n`), reutilizable por los dos bots.
-- [x] **Auditoría i18n** ✅ — se hizo la primera, porque sin textos no hay nada que portar:
-      - El catálogo pasa de **96 a 366 textos** (183 tags × 2 idiomas, simétricos). Faltaban **134**:
-        la recuperación de F2 solo miró las migraciones de `Commons-Engine`, y los textos del bot de
-        diccionarios estaban en las de `CAH-Engine` (`V2.0.0_2`, `_4` y `_5`). Sin esto, el bot
-        habría enseñado el nombre del tag en crudo en casi todas sus pantallas.
-      - **Cuatro tags** aparecían en las dos fuentes con textos distintos. Se escoge la variante
-        acentuada y la que concuerda con el significado: `ERROR_PLAYER_ALREADY_VOTED_DELETION` decía
-        *"Ya has votado una carta"*, que es de otra cosa (y en inglés, el mismo error).
-      - **Ocho textos son nuevos** porque el código los pedía y no existían en ninguna migración:
-        `UNKNOWN_ERROR` y los tres `COLLABORATOR_ADD_*`, en los dos idiomas.
-      - **Tres tags son erratas del código viejo** (`GAME_ONLY_CREATOR_CAN_DELETE` en vez de
-        `ERROR_GAME_ONLY_CREATOR_CAN_DELETE`, `PLAYER_DOES_NOT_EXISTS` y `DICTIONARY_NOT_PUBLISHED`):
-        al usuario se le enseñaba el nombre del tag. No se añaden; el código nuevo usa el correcto.
-      - Dos tests lo blindan: que estén los textos del bot de diccionarios, y que los dos idiomas
-        tengan el mismo número de tags.
+Las tres sustituciones que atraviesan el porte entero:
 
-**Aceptación:** flujo manual completo: crear diccionario → añadir cartas → publicar → compartir →
-colaborar.
+1. Los identificadores del motor son `UUID`, no `long` (39 parseos en el ApplicationService).
+2. **El chat al que se responde sale de `TelegramSecurityUtils.getTelegramId()`.** El código anterior
+   usaba `SecurityUtils.getId()` porque el id del usuario *era* el de Telegram; ahora son cosas
+   distintas. Aparecía en casi todos los métodos, y también al escribirle a **otro** usuario (avisos
+   a colaboradores, respuestas al creador), que ahora pasa por la tabla de equivalencias y contempla
+   que no exista. Al ser `UUID` frente a `long`, lo señaló el compilador uno a uno.
+3. Los errores se traducen en un único sitio.
+
+Hallazgos del porte:
+
+- ⚠️ **`CAHApplicationException` no extendía `ApplicationException`** (ni `SHApplicationException`):
+  eran clases paralelas colgando de `RuntimeException`. El patrón que repetía el código —un `catch`
+  por excepción concreta y un `catch (ApplicationException)` de red— tenía ese segundo catch
+  **inalcanzable para todo lo de diccionarios y cartas**, así que cualquier error no contemplado
+  acababa en el `catch (Exception)` del ApplicationService, que solo escribe en el log: **el bot se
+  quedaba callado**. Jerarquías unificadas.
+- **37 errores del motor no tienen texto i18n.** Casi todos son validaciones internas. El resolver
+  detecta que `I18NService` le devolvió el propio tag y cae al mensaje genérico, porque enseñarle
+  `ERROR_ROUND_NOT_FOUND` a un usuario es peor que decirle que algo ha fallado. Un test recorre los
+  dos enums enteros. **Los 36 de partida quedan pendientes para F6.**
+- **`keyboardRow` ya no acepta `List`** en telegrambots 10, sino `InlineKeyboardRow`. Otra
+  incompatibilidad latente que nunca salió porque `Bots` no compilaba.
+- **Un identificador mal tecleado no producía respuesta**: `UUID.fromString` lanzaba
+  `IllegalArgumentException`, se la comía el catch genérico y el usuario no se enteraba. Ahora se le
+  dice que esa opción no está en la lista.
+- **`booleanToSpanish` devolvía "Si"/"No" en duro**, así que a un usuario en inglés le salía en
+  castellano en cada línea de cada lista. Ya no se usa.
+
+Decisiones de la fase:
+
+- **Las listas se numeran** y lo que el usuario teclea se resuelve contra la lista que vio. El
+  registro **guarda esa lista, no la recalcula**: entre que el bot la enseña y el usuario contesta,
+  otro colaborador puede haber añadido o borrado algo, y recalcular haría que el número señalara a
+  otra cosa — en un flujo de borrado, al diccionario equivocado. Los botones siguen llevando el
+  identificador completo y se aceptan igual.
+- **Los servicios del bot son condicionales a `dictionaries.bot.enabled`**: sin eso, un despliegue
+  que solo levante el bot de juego necesitaría igualmente el token del de diccionarios.
+- El alta recibe el usuario de Telegram completo en vez de tres campos sueltos, porque el alias hace
+  falta para la identidad (D2).
 
 ### F6 — Bot de juego (4–5 jornadas)
 
@@ -806,6 +834,18 @@ colaborar.
          `/deletegamebyusername` (vía `getByUsername` normalizado, D2), `/deleteallgames`
       6. admin: `/sendmessagetoeveryone`, `/toggleglobalmessages`
 - [ ] Al terminar/borrar partida: limpiar `telegram_game` y `telegram_player`.
+
+Lo que F5 le deja hecho y lo que le deja pendiente:
+
+- **Hecho**: `ErrorMessageResolver`, `SelectionRegistry` (números cortos), `TelegramAdmins`,
+  `sendMessageWithForceReply`, y el patrón de porte ya rodado (sesión, escritura a otros usuarios,
+  `guarded`).
+- **Pendiente**: los **36 errores de partida sin texto i18n** que detectó la auditoría
+  (`ROUND_*`, `PLAYER_CANNOT_*`, `GAME_*`). Hoy caen al mensaje genérico, que no miente pero tampoco
+  ayuda. Conviene escribirlos al portar cada flujo, no antes.
+- **Ojo**: `CCLHBotServiceImpl` usa `UNKNOWN_ERROR` y dos tags con errata
+  (`GAME_ONLY_CREATOR_CAN_DELETE`, `PLAYER_DOES_NOT_EXISTS`); el nombre correcto lleva `ERROR_`
+  delante.
 
 **Aceptación:** partida completa de 3 jugadores en un grupo de pruebas, en los dos modos de puntuación.
 
@@ -864,8 +904,8 @@ texto exacto de los mensajes depende de la tabla `Tag`, cuyo estado tras el refa
 | Módulo | Cambio | Riesgo |
 |---|---|---|
 | `Commons-Engine` | Split `name`/`username` en `User` y `name`/`roomname` en `Room` + APIs y tests (§5.1) | ✅ hecho |
-| `CAH-Engine` | + `createGame(Room)`; adaptación a las firmas nuevas de `RoomService`; fixtures + DTD | ✅ hecho |
-| `SH-Engine` | Lo mismo que CAH: `createGame(Room)`, fixtures + DTD, dos llamadas en tests (§5.2 bis) | ✅ hecho |
+| `CAH-Engine` | + `createGame(Room)`; adaptación a las firmas nuevas de `RoomService`; fixtures + DTD; `CAHApplicationException` pasa a extender `ApplicationException` | ✅ hecho |
+| `SH-Engine` | Lo mismo que CAH: `createGame(Room)`, fixtures + DTD, dos llamadas en tests (§5.2 bis), y la misma unificación de excepciones | ✅ hecho |
 | `Commons-Telegram` | Rename de paquete; + dependencia `engine-commons`; + identidad/sesión; + `UpdateDispatcher`; arreglos de `pendingReplies` | ✅ hecho |
 | Pom raíz | − `Bots`, + `CAH-Telegram` (módulo y BOM) | Bajo |
 | `Bots` | Fuera del reactor en F0; se archiva en F8 | — |
@@ -888,7 +928,7 @@ starter de webhook no publica ningún endpoint HTTP, cosa que había que arregla
 ## 12. Orden de ataque recomendado
 
 ```
-F0 reactor  →  F1 split identidad  →  F2 esquema+datos  →  F3 sesión Telegram
+F0 reactor  →  F1 split identidad  →  F2 esquema+datos  →  F3 sesión Telegram   [hechas]
                                                                   ↓
             F8 docs  ←  F7 hardening  ←  F6 bot juego  ←  F5 bot diccionarios  ←  F4 esqueleto
 ```
