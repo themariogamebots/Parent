@@ -867,15 +867,44 @@ Sobre los errores sin texto:
   y **se dejan a propósito** cayendo al mensaje genérico: si alguna vez afloran, "Ha ocurrido un
   error inesperado" es mejor que "El usuario no puede ser nulo". Hay un test que fija las dos listas.
 
-### F7 — Endurecimiento (1–2 jornadas)
+### F7 — Endurecimiento (1–2 jornadas) 🔶 PARCIAL
 
-- [ ] **Prueba manual de los dos bots**, que es lo que cierra F5 y F6: flujo completo de diccionarios
-      y partida de 3 jugadores en los dos modos de puntuación.
-- [ ] Modo webhook probado (es donde aparece la concurrencia real).
-- [ ] Revisión de transacciones: una por acción de negocio, con las llamadas a la API de Telegram
-      **fuera** (R4).
-- [ ] Tests de integración con dbunit siguiendo el patrón de `CAH-Engine`.
-- [ ] Perfil `pro`: Let's Encrypt, SSL, `dependency-check`.
+- [x] **Tests de integración de los dos bots** (16 nuevos). Se hicieron primero, y no lo que estaba
+      primero en la lista, porque hasta entonces **las ~2400 líneas portadas solo se habían
+      compilado**: los tests cubrían cableado, esquema y tablas de comandos, pero ni una línea de
+      lógica. La mensajería se sustituye por una que apunta lo que se envía, contra la base de datos
+      real. Encontraron tres fallos (abajo).
+- [x] **Perfiles `dev`, `pre` y `pro`**. Con `mvn -Pdev spring-boot:run` la aplicación **arranca sin
+      configurar ninguna variable de entorno**: Flyway aplica las dos migraciones sobre una H2 en
+      fichero y el contexto levanta. Es la primera vez que esto se ejecuta como aplicación.
+- [ ] **Prueba manual de los dos bots** y **modo webhook de punta a punta**: necesitan un bot y un
+      despliegue reales.
+- [ ] **Revisión de transacciones (R4)**: sin hacer, deliberadamente. Ver abajo.
+
+Lo que encontraron los tests de integración, y que compilando no se veía:
+
+1. ⚠️ **Crear una partida fallaba siempre.** `createOrUpdate` hace `merge`, y `merge` sobre una
+   entidad nueva cuyo identificador es *derivado* de otra —`TelegramGame` lo deriva de la partida—
+   no funciona: Hibernate necesita leer el id para buscar la fila que actualizar y todavía no lo
+   hay. Se añade `create()` (persist) a la capa de DAO.
+2. **Sin diccionario por defecto configurado, crear partida moría con un `Identifier may not be
+   null`** de Hibernate. No es solo de test: en una base de datos nueva sin los datos legacy,
+   `cah.game.default-dictionary-id` apunta a un diccionario que no existe. Ahora se dice qué falta.
+3. **`TelegramSession` limpiaba la sesión del hilo** en vez de restaurar la anterior. En producción
+   la continuación corre en un hilo del pool y da igual, pero si alguna vez se ejecutara en el mismo
+   hilo se llevaría por delante la sesión del resto del update.
+
+⚠️ **El perfil `check` hoy hace daño y no se ha aplicado.** El formateador compartido une las líneas
+partidas y luego no las vuelve a partir: al ejecutarlo quedan **249 líneas por encima de 120
+caracteres, la mayor de 1055**, cuando el propio `default-formatter-config.xml` declara
+`lineSplit=120`. Tiene `join_wrapped_lines=false` pero le faltan las políticas de ajuste. Como el
+perfil ejecuta `format` (que modifica ficheros), quien lo lance se lleva por delante el formato de
+todo el reactor. **Hay que arreglar el config antes de volver a usarlo.**
+
+Sobre R4 (llamadas a Telegram dentro de la transacción): sigue igual, a propósito. En long-polling no
+puede agotar el pool porque se atiende un update cada vez; en webhook sí es un riesgo real, pero es
+justo el modo que no se puede medir todavía. Tocarlo a ciegas cambiaría el orden de los envíos
+respecto al commit sin poder comprobar el efecto.
 
 ### F8 — Documentación y cierre
 
@@ -896,10 +925,11 @@ traducir el primer mensaje. **Mitigación:** el query de `login` hace
 (`LongPollingSingleThreadUpdateConsumer`, un solo hilo) **todos** los updates posteriores heredan la
 identidad del primero. Es un fallo de seguridad, no de estilo.
 
-**R3 — Llamadas asíncronas y `ThreadLocal`.** `BotMessageService.sendMessageAsync` ejecuta el callback
-en **otro hilo**: allí no hay ni `SecurityContext` ni `TelegramContext`. Se usa en la creación de
-partida (capturar `messageId`). **Mitigación:** capturar `User`, `Room` e ids en variables locales
-*antes* de lanzar el async. Nunca llamar a `SecurityUtils`/`TelegramSecurityUtils` dentro de un callback.
+**R3 — Llamadas asíncronas y `ThreadLocal`** ✅ resuelto en F6. `sendMessageAsync` continúa en un hilo
+del pool, donde no hay ni `SecurityContext` ni `TelegramContext`. Se resuelve con `TelegramSession`:
+se captura antes de lanzar el trabajo y se restaura (y se deshace) alrededor de la continuación. El
+código anterior rehacía el `UserDetails` a mano dentro del callback pero no lo retiraba, así que se
+quedaba pegado al hilo del pool.
 
 **R4 — Transacción y API de Telegram.** Una llamada a Telegram dentro de un `@Transactional` bloquea
 una conexión de BD durante cientos de ms. Patrón: transacción → commit → enviar mensajes → transacción
