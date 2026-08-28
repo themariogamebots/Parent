@@ -47,3 +47,6 @@ build/
 
 ### Bots: retirado del reactor, fuera del superproyecto ###
 /Bots/
+
+### Scripts de despliegue: contienen datos del servidor, no se publican ###
+/scripts/
