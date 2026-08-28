@@ -46,7 +46,7 @@ llevándose por delante el formato de todo el reactor.
   para los dos dialectos (h2 y mariadb). `ddl-auto=validate` + `SchemaBaselineTest` fallan si hay deriva.
 - **Todo texto visible es un tag i18n** resuelto contra la tabla `tag`, no un fichero `.properties`.
   Un literal español en el código hace fallar un test. Los tags nuevos van en
-  `V3.0.0_2__Languages_and_tags.sql`, en los dos idiomas y los dos dialectos.
+  `V2.0.0_2__Languages_and_tags.sql`, en los dos idiomas y los dos dialectos.
 - **Las claves de comando y de `callback_data` son contrato con lo ya desplegado**: Telegram guarda
   los botones dentro de los mensajes para siempre, así que renombrar una clave rompe partidas en curso.
   Hay tests que fijan los conjuntos exactos.
@@ -57,4 +57,4 @@ llevándose por delante el formato de todo el reactor.
 - **Una BD recién creada no puede crear partidas**: `cah.game.default-dictionary-id` apunta a un UUID
   fijo que solo existe tras ejecutar `CAH-Telegram/tools/legacy_data_migration.py`.
 - **Nada de esto ha hablado todavía con Telegram de verdad** — la fase F7 del plan
-  (`docs/CAH-Telegram-PLAN.md`) sigue abierta en ese punto.
+  (`docs/specs/CAH-Telegram-PLAN.md`) sigue abierta en ese punto.

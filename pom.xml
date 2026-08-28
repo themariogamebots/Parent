@@ -204,7 +204,7 @@
                     <configuration>
                         <failBuildOnCVSS>8</failBuildOnCVSS>
                         <suppressionFile>${project.basedir}/src/main/resources/supressed-cve-exceptions.xml</suppressionFile>
-                        <nvdDatafeedUrl>http://127.0.0.1/nvdcve-{0}.json.gz</nvdDatafeedUrl>
+                        <nvdDatafeedUrl>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz</nvdDatafeedUrl>
                         <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
                         <ossIndexUsername>${env.OSS_INDEX_USER}</ossIndexUsername>
                         <ossIndexPassword>${env.OSS_INDEX_PASS}</ossIndexPassword>

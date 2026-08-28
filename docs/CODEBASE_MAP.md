@@ -268,7 +268,7 @@ Ambos con `@ConditionalOnProperty` (`cclh.bot.enabled`, `dictionaries.bot.enable
 | Bot de juego | `game/app/CCLHApplicationServiceImpl`, `game/service/impl/CCLHTelegramServiceImpl` |
 | Bot de diccionarios | `dictionaries/app/DictionariesApplicationServiceImpl`, `dictionaries/service/impl/DictionariesTelegramServiceImpl` |
 | Modelos propios | `TelegramGame` (ids de mensaje: first/creator/currentRound), `TelegramPlayer` (`handMessageId`), `TelegramRoom` (`"tg:<chatId>"` → `Room`) |
-| Esquema | `db/migration/{h2,mariadb}/V3/V3.0.0_1__Baseline.sql` (generado, 20 tablas) + `V3.0.0_2__Languages_and_tags.sql` (215 tags × 2 idiomas = 430 filas) |
+| Esquema | `db/migration/{h2,mariadb}/V3/V3.0.0_1__Baseline.sql` (generado, 20 tablas) + `V2.0.0_2__Languages_and_tags.sql` (215 tags × 2 idiomas = 430 filas) |
 | Herramientas | `tools/legacy_data_migration.py` (CSV → SQL), `src/test/.../tools/SchemaGenerator.java` (entidades JPA → DDL) |
 
 **Perfiles**: `dev` (H2 en fichero, bots apagados), `pre` (MariaDB, sin SSL, tras proxy),
@@ -566,7 +566,7 @@ busca `VotationModeEnum` en ambos ficheros.
 **Añadir un campo persistido**
 1. Modifícalo en la entidad JPA del módulo correspondiente.
 2. Ejecuta a mano `CAH-Telegram/src/test/java/.../tools/SchemaGenerator.java` para regenerar
-   `V3.0.0_1__Baseline.sql` en **los dos dialectos**.
+   `V2.0.0_1__Baseline.sql` en **los dos dialectos**.
 3. `SchemaBaselineTest` fallará si entidades y SQL no coinciden.
 
 **Añadir un error de dominio**
@@ -576,7 +576,7 @@ lo traduce por convención (`X` → `ERROR_X`); si el nombre no sigue la convenc
 de overrides.
 
 **Añadir un texto visible**
-Nunca un literal: crea un tag, añádelo a `V3.0.0_2__Languages_and_tags.sql` en `es` y `en` y en los
+Nunca un literal: crea un tag, añádelo a `V2.0.0_2__Languages_and_tags.sql` en `es` y `en` y en los
 dos dialectos, y resuélvelo con `i18NService.get(tag)`. `SchemaBaselineTest` comprueba que ambos
 idiomas tengan exactamente el mismo número de tags.
 
@@ -610,7 +610,7 @@ tablas `telegram_*` propias para los ids de mensaje. Todo `SHService` está list
 | Commons-Telegram | `Commons-Telegram/docs/CODEBASE_MAP.md` |
 | CAH-Telegram | `CAH-Telegram/docs/CODEBASE_MAP.md` |
 
-Además, `docs/CAH-Telegram-PLAN.md` documenta el plan de refactor por fases F0–F8
+Además, `specs/CAH-Telegram-PLAN.md` documenta el plan de refactor por fases F0–F8
 (todas cerradas salvo F7, parcial: falta prueba manual contra Telegram, validación de
 webhook extremo a extremo, y la revisión "R4" de red-dentro-de-transacción).
 

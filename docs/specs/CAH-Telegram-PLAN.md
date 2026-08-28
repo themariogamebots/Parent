@@ -570,8 +570,8 @@ Cada fase deja el reactor **compilando** (`mvn -q install` desde la raíz).
 ### F0 — Preparación del reactor (½ jornada) ✅ HECHA
 
 - [x] Sacar `Bots` de `<modules>` del pom raíz (D11). El directorio se queda en disco como referencia.
-- [x] Crear `CAH-Telegram/` + `git init` (cada módulo del reactor tiene su repo).
-- [x] `pom.xml` del módulo: parent `org.themarioga:parent:2.0.0`, dependencias `Commons-Telegram` +
+- [x] Crear `../../CAH-Telegram` + `git init` (cada módulo del reactor tiene su repo).
+- [x] `../../pom.xml` del módulo: parent `org.themarioga:parent:2.0.0`, dependencias `Commons-Telegram` +
       `cah-engine` + `flyway-core` + `flyway-mysql`; perfiles `dev` (H2) / `pre` / `pro` (driver
       MariaDB, que `Bots/pom.xml` **no declaraba** en ningún perfil).
 - [x] Añadir `<module>CAH-Telegram</module>` al pom raíz.
@@ -626,7 +626,7 @@ las migraciones viejas. No hay backup de usuarios, ni de colaboradores, ni de pa
       > de `CAH-Engine`. Ver F5.
 - [x] **Histórico V1/V2 retirado del classpath** a `<módulo>/docs/legacy-db-migration/` con un README
       que explica por qué. Seguía publicándose dentro de los jars y Flyway lo ejecutaba.
-- [x] **Conversor `CAH-Telegram/tools/legacy_data_migration.py`**: CSV → SQL, para MariaDB y H2.
+- [x] **Conversor `../../CAH-Telegram/tools/legacy_data_migration.py`**: CSV → SQL, para MariaDB y H2.
 - [x] **Ensayo end-to-end sobre H2 limpia**: baseline + tags + datos legacy, todo aplicado sin errores
       y verificado con consultas (recuentos, integridad referencial y escapado de comillas).
 - [ ] **Pase contra una MariaDB real**: el script `mariadb` sale del mismo generador pero **no se ha
@@ -908,13 +908,13 @@ respecto al commit sin poder comprobar el efecto.
 
 ### F8 — Documentación y cierre ✅ HECHA (salvo la acción en GitHub)
 
-- [x] **`CLAUDE.md` + `docs/CODEBASE_MAP.md` de `CAH-Telegram`**, con el formato de `CAH-Engine`. Era
+- [x] **`../../CLAUDE.md` + `../CODEBASE_MAP.md` de `CAH-Telegram`**, con el formato de `CAH-Engine`. Era
       el único módulo del reactor sin ninguno de los dos.
 - [x] **Documentación de `Commons-Telegram` reescrita entera.** Era anterior al refactor y describía
       un módulo que ya no existe: paquete `org.themarioga.game.*`, bots construidos "sobre los
       starters" (hoy los sustituye `TelegramBotsRegistrarConfig`), estructura `model` → `service/intf`
       sin rastro de identidad, sesión ni `UpdateDispatcher`, y un aviso sobre unos métodos factoría de
-      `BotCreationUtils` que ya no era cierto. El `README.md` iba con ella: su ejemplo **ya no
+      `BotCreationUtils` que ya no era cierto. El `../../README.md` iba con ella: su ejemplo **ya no
       compilaba** (constructores viejos, `spring.main.allow-circular-references`, inyección por
       setter, `example.bot.type` en vez de `telegram.bots.type`) y no mencionaba ni el
       `spring.autoconfigure.exclude` obligatorio ni el endpoint `/callback/{botName}`.
