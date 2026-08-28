@@ -510,33 +510,55 @@ Válidas en **todo** el reactor salvo donde se indique:
 26. **`setPendingReply` sobrescribe en silencio** cualquier respuesta pendiente previa de ese chat.
 27. **El formato de `callback_data` no se valida**: la convención `__` se confía, no se impone.
 28. **No hay rate limiting** en ninguna parte de la capa de mensajería.
+29. **Los objetos de telegrambots no se pueden deserializar con el Jackson de Spring Boot 4.**
+    Spring Boot 4 convierte JSON con **Jackson 3** (`tools.jackson.*`); telegrambots 10 sigue
+    compilado contra **Jackson 2** (`com.fasterxml.jackson.*`), y ambos viajan en el fat jar.
+    Las anotaciones de `jackson-annotations` (`@JsonProperty`) no cambiaron de paquete y siguen
+    valiendo, pero `@JsonDeserialize` vive en `jackson-databind` y en la v3 pasó a
+    `tools.jackson.databind.annotation`. Las clases que Lombok marca con `@Jacksonized`
+    (`MessageEntity`, `User`, y toda la que tiene campos `@NonNull` y por tanto no tiene
+    constructor vacío) solo se pueden construir por su builder, declarado con el
+    `@JsonDeserialize` de Jackson 2: Jackson 3 lo ignora, no encuentra creator y revienta con
+    `InvalidDefinitionException: no Creators, like default constructor, exist`. `Update` y
+    `Message` sí llevan `@NoArgsConstructor`, así que el fallo no salta en la raíz sino al
+    descender (típicamente en `entities`/`caption_entities`, es decir en **cualquier update con
+    un comando**). Por eso `TelegramWebhookController` recibe el cuerpo como `String` y lo
+    convierte a mano con un `ObjectMapper` de Jackson 2 — el mismo que usa la librería en modo
+    long polling. **No volver a poner `@RequestBody Update`**, y tener cuidado con pasarle
+    cualquier objeto de telegrambots a los conversores de Spring.
 
 ### CAH-Telegram
 
-29. **Los ids de mensaje hay que recogerlos ANTES de que el motor borre la partida.** Todas las
+30. **Los ids de mensaje hay que recogerlos ANTES de que el motor borre la partida.** Todas las
     rutas de borrado/fin de partida guardan primero los ids de `TelegramGame`/`TelegramPlayer`,
     porque una vez borrada la fila padre las relaciones JPA ya no se pueden recorrer.
-30. **Las claves de comando y de callback son contrato con lo ya desplegado.** Telegram guarda los
+31. **Las claves de comando y de callback son contrato con lo ya desplegado.** Telegram guarda los
     botones dentro de los mensajes para siempre: renombrar una clave rompe partidas en curso.
     `CCLHApplicationServiceTest` y `DictionariesApplicationServiceTest` fijan los conjuntos exactos
     de claves precisamente por eso.
-31. **`cah.game.default-dictionary-id` apunta a un UUID fijo**
+32. **`cah.game.default-dictionary-id` apunta a un UUID fijo**
     (`00000000-0000-4000-a000-000000000001`) que solo existe si se ha ejecutado
     `tools/legacy_data_migration.py`. Una BD recién creada **no puede crear partidas**.
-32. **El baseline SQL es generado, no se edita a mano.** Se regenera con
+33. **El baseline SQL es generado, no se edita a mano.** Se regenera con
     `src/test/java/.../tools/SchemaGenerator.java` cuando cambian las entidades;
     `ddl-auto=validate` + `SchemaBaselineTest` cierran el bucle y fallan si hay deriva.
-33. **H2 y MariaDB divergen en constraints, no solo en tipos.** Varios `unique` presentes en H2
+34. **H2 y MariaDB divergen en constraints, no solo en tipos.** Varios `unique` presentes en H2
     (`game.creator_id`, `game.room_id`, `card_id` en las tablas de mazo) **no están en MariaDB**.
     Es una divergencia real de esquema entre dialectos, no cosmética.
-34. **En Spring Boot 4 la autoconfiguración de Flyway vive en su propio módulo.** Sin
+35. **En Spring Boot 4 la autoconfiguración de Flyway vive en su propio módulo.** Sin
     `spring-boot-flyway`, `flyway-core` está en el classpath pero **no se ejecuta ninguna migración**.
-35. **Llamadas de red a Telegram dentro de transacciones de BD.** Es seguro bajo long-polling
+36. **Llamadas de red a Telegram dentro de transacciones de BD.** Es seguro bajo long-polling
     (los updates se procesan de uno en uno), pero es un riesgo real bajo webhook: peticiones HTTP
     concurrentes podrían agotar el pool de conexiones. Marcado como pendiente ("R4") en el plan,
     deliberadamente sin tocar hasta poder medirlo.
-36. **Nada de esto ha hablado todavía con Telegram de verdad.** No hay prueba manual con un token
-    real ni validación de webhook extremo a extremo. Es la parte explícitamente pendiente de la fase F7.
+37. **El webhook ya recibe updates reales, pero nada aguas abajo está probado contra Telegram.**
+    Desde el despliegue del 2026-08-28 hay bot real: `setWebhook` funciona, el TLS y el enrutado
+    `/callback/{botPath}` funcionan, y Telegram entrega updates que llegan hasta
+    `TelegramWebhookController`. Ahí se quedaban todos, reventando al deserializar (ver el gotcha
+    de Jackson 2 / Jackson 3 en la sección de Commons-Telegram). Con eso arreglado, sigue **sin
+    verificarse en vivo** todo lo que viene después del controller —dispatch, sesión, handlers y
+    envío de mensajes— y el modo long polling con un token real tampoco se ha probado nunca.
+    Es lo que queda abierto de la fase F7.
 
 ---
 

@@ -22,7 +22,7 @@ telegrambots 10.0.0 · JUnit 5 · Mockito · DBUnit · H2 (dev/test) / MariaDB (
 | `Commons-Telegram` | Infraestructura de bots: identidad, sesión por update, dispatch, mensajería |
 | `CAH-Telegram` | **La aplicación desplegable.** Dos bots (`cclh` + `dictionaries`) y el **esquema de BD canónico** de todo el reactor |
 
-Para la arquitectura detallada, los flujos, las convenciones y los 36 gotchas documentados,
+Para la arquitectura detallada, los flujos, las convenciones y los 37 gotchas documentados,
 ver [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md). Cada submódulo tiene además su propio
 `docs/CODEBASE_MAP.md` (ojo: los de Commons-Engine, CAH-Engine y SH-Engine contienen
 afirmaciones obsoletas — el mapa raíz lista cuáles).
@@ -56,5 +56,6 @@ llevándose por delante el formato de todo el reactor.
   (`TelegramGame`, `TelegramPlayer`): hay que usar `create` (persist).
 - **Una BD recién creada no puede crear partidas**: `cah.game.default-dictionary-id` apunta a un UUID
   fijo que solo existe tras ejecutar `CAH-Telegram/tools/legacy_data_migration.py`.
-- **Nada de esto ha hablado todavía con Telegram de verdad** — la fase F7 del plan
-  (`docs/specs/CAH-Telegram-PLAN.md`) sigue abierta en ese punto.
+- **El webhook ya recibe updates reales de Telegram**, pero todo lo que viene después del
+  controller (dispatch, sesión, handlers, envío) sigue sin probarse en vivo, y long polling con un
+  token real tampoco — la fase F7 del plan (`docs/specs/CAH-Telegram-PLAN.md`) sigue abierta ahí.
