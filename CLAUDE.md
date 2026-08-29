@@ -18,11 +18,12 @@ telegrambots 10.0.0 · JUnit 5 · Mockito · DBUnit · H2 (dev/test) / MariaDB (
 |---|---|
 | `Commons-Engine` | Base compartida: `User`, `Room`, `Lang`, `Tag`, `Game`/`Player` abstractos, DAO/Service genéricos, i18n en BD, security |
 | `CAH-Engine` | Reglas de Cartas Contra la Humanidad (partidas, rondas, votación, diccionarios) |
-| `SH-Engine` | Reglas de Secret Hitler (roles, leyes, elecciones, poderes ejecutivos) — **sin consumidor** |
+| `SH-Engine` | Reglas de Secret Hitler (roles, leyes, elecciones, poderes ejecutivos) |
 | `Commons-Telegram` | Infraestructura de bots: identidad, sesión por update, dispatch, mensajería |
-| `CAH-Telegram` | **La aplicación desplegable.** Dos bots (`cclh` + `dictionaries`) y el **esquema de BD canónico** de todo el reactor |
+| `CAH-Telegram` | **Aplicación desplegable.** Dos bots (`cclh` + `dictionaries`) y el esquema de BD de CAH |
+| `SH-Telegram` | **Aplicación desplegable, a medias.** Bot de Secret Hitler y su propio esquema de BD; el comportamiento llega en S4–S6 del plan |
 
-Para la arquitectura detallada, los flujos, las convenciones y los 37 gotchas documentados,
+Para la arquitectura detallada, los flujos, las convenciones y los 38 gotchas documentados,
 ver [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md). Cada submódulo tiene además su propio
 `docs/CODEBASE_MAP.md` (ojo: los de Commons-Engine, CAH-Engine y SH-Engine contienen
 afirmaciones obsoletas — el mapa raíz lista cuáles).

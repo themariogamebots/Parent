@@ -38,6 +38,7 @@ graph TB
     subgraph eng["Motores de juego"]
         CAHE["CAH-Engine<br/>reglas de CAH"]
         SHE["SH-Engine<br/>reglas de Secret Hitler"]
+        SHT["SH-Telegram<br/>bot de Secret Hitler"]
     end
     subgraph base["Base compartida"]
         CE["Commons-Engine<br/>User · Room · Lang · Tag<br/>DAO/Service genéricos · i18n · security"]
@@ -56,15 +57,23 @@ graph TB
     CAHT --> DB
     CE -.->|Hibernate| DB
 
-    SHE -.->|"falta un SH-Telegram"| CT
+    SHT --> CT
+    SHT --> SHE
+    SHT --> DB
+    TG <--> SHT
 ```
 
 El orden del reactor (raíz `pom.xml`) es exactamente el de las flechas:
-`Commons-Engine → CAH-Engine → SH-Engine → Commons-Telegram → CAH-Telegram`.
+`Commons-Engine → CAH-Engine → SH-Engine → Commons-Telegram → CAH-Telegram → SH-Telegram`.
 
-**La pieza que falta**: `SH-Engine` está terminado (máquina de estados completa,
-poderes ejecutivos, condiciones de victoria, tests) pero **no existe `SH-Telegram`**.
-Nada expone Secret Hitler a usuarios todavía.
+**`SH-Telegram` está a medias** (desde 2026-08-29): tiene módulo, esquema propio, catálogo i18n,
+cableado del bot y la tabla de comandos y callbacks completa, pero el comportamiento —lobby, ronda y
+poderes— llega en las fases S4 a S6 de [docs/specs/SH-Telegram-PLAN.md](specs/SH-Telegram-PLAN.md).
+Todavía no expone Secret Hitler a usuarios.
+
+**Dos despliegues, dos bases de datos.** `CAH-Telegram` y `SH-Telegram` no comparten base de datos:
+`cah.models.game.Game` y `sh.models.Game` son las dos `@Entity` con el mismo nombre simple y, con la
+herencia `TABLE_PER_CLASS` que usan, mapearían a la misma tabla `game` (ídem `player` y `round`).
 
 ---
 
@@ -209,10 +218,11 @@ Hitler ejecutado · Hitler elegido canciller con ≥3 leyes fascistas · ley aut
 **Poderes ejecutivos**: `INVESTIGATE_LOYALTY`, `SPECIAL_ELECTION`, `POLICY_PEEK`,
 `EXECUTION`, `ENABLE_VETO` — todos implementados y con test.
 
-**Dependencias**: `commons-engine`. **Dependientes**: **ninguno** — no hay `SH-Telegram`.
+**Dependencias**: `commons-engine`. **Dependientes**: `SH-Telegram` (desde 2026-08-29).
 
-**Estado**: funcionalmente completo y con tests (`SHServiceTest`, 473 líneas). Sin migraciones
-Flyway ni bundle i18n propios; los textos de error son literales españoles en `SHErrorEnum`.
+**Estado**: funcionalmente completo y con tests (85 en el módulo). Sin migraciones Flyway propias
+—las tiene `SH-Telegram`—, y los textos de `SHErrorEnum` son literales españoles a propósito: son el
+mensaje interno, y el que ve el usuario sale de la tabla `tag` por la convención `ERROR_<NOMBRE>`.
 
 ### Commons-Telegram
 
@@ -457,60 +467,80 @@ Válidas en **todo** el reactor salvo donde se indique:
    un usuario inactivo se puede recuperar por username sin error.
 9. **`.gitmodules` apunta mal**: la ruta `CAH-Engine` está mapeada al remoto
    `https://github.com/themarioga/CCLH-Commons.git`, no a un repo llamado `CAH-Engine`.
+10. **Los fixtures de DBUnit heredan del DTD la lista de tablas, no de sus filas.** Como los ficheros
+    declaran `<!DOCTYPE dataset SYSTEM "…schema.dtd">`, el dataset que carga DbUnit contiene **todas**
+    las tablas del DTD (vacías o no) y en el **orden en que el DTD las declara**. De ahí tres reglas
+    que hay que respetar, o los tests se caen con violaciones de clave ajena:
+    - **Un solo `@DatabaseSetup` por elemento**, con todos los ficheros en el array
+      (`@DatabaseSetup({"a.xml", "b.xml"})`). Repetir la anotación hace que cada `CLEAN_INSERT` borre
+      todas las tablas del DTD y, con ellas, lo que insertó el fichero anterior.
+    - **El `<!ELEMENT dataset …>` va ordenado por dependencias** (lo referenciado antes que lo que
+      referencia), porque ese es el orden de inserción; el de borrado es el inverso.
+    - **Los `@DatabaseSetup` de método van con `type = DatabaseOperation.REFRESH`**, que es lo que
+      quieren decir: añadir filas sobre el fixture de la clase, sin vaciar nada. Excepción: las
+      tablas de unión sin clave primaria (`game_deletion_votes`) no admiten `REFRESH`; van en su
+      propia anotación, y su fichero no declara DTD.
+
+    Esto tuvo el reactor entero en rojo (135 tests entre CAH-Engine y SH-Engine) hasta el 2026-08-29.
 
 ### CAH-Engine
 
-10. **Todos los enums se almacenan por ordinal** (`@Enumerated(ORDINAL)`). Reordenar
+11. **Todos los enums se almacenan por ordinal** (`@Enumerated(ORDINAL)`). Reordenar
     `CardTypeEnum`/`RoundStatusEnum`/`VotationModeEnum`/`PunctuationModeEnum` es un cambio de esquema
     destructivo, y el SQL nativo de `GameDaoImpl.transferCardsFromDictionaryToDeck` hardcodea
     `type=0` (BLACK) / `type=1` (WHITE).
-11. **`GameService.endGame` borra la fila de la partida** (sin archivado) y **la fachada `CAHService`
+12. **`GameService.endGame` borra la fila de la partida** (sin archivado) y **la fachada `CAHService`
     nunca lo llama**. La ruta de fin de partida solo pone `status = ENDING` sobre la entidad en memoria;
     quien consuma el motor debe llamar a `GameService.endGame` directamente.
-12. **`nextRound(Game)` recibe un `Game`**, mientras que el resto de métodos de `CAHService` reciben
+13. **`nextRound(Game)` recibe un `Game`**, mientras que el resto de métodos de `CAHService` reciben
     un `Room`. Inconsistencia real de la API, todavía presente.
-13. **No hay patrón estrategia para los modos de votación.** Las diferencias entre
+14. **No hay patrón estrategia para los modos de votación.** Las diferencias entre
     DEMOCRACY/CLASSIC/DICTATORSHIP son `if`/`equals` repartidos por `CAHServiceImpl` y
     `RoundServiceImpl`; añadir un modo obliga a tocar todas esas ramas a mano.
-14. **Los métodos `toggle*` de diccionario son flips literales**: `togglePublished` vuelve a ejecutar
+15. **Los métodos `toggle*` de diccionario son flips literales**: `togglePublished` vuelve a ejecutar
     la comprobación completa de "puede publicarse" incluso cuando se está *despublicando*.
 
 ### SH-Engine
 
-15. **`vetoIsActive` nunca se pone a `false`.** Una vez desbloqueado el veto, queda activo el resto
+16. **`vetoIsActive` nunca se pone a `false`.** Una vez desbloqueado el veto, queda activo el resto
     de la partida (lo cual coincide con las reglas reales de Secret Hitler, así que probablemente
     sea correcto por diseño).
-16. **Las `Law` de los mazos no tienen cascade.** `Game.lawPickDeck`/`lawDiscardDeck` son
-    `@OneToMany` sobre tabla de unión sin cascade: una `Law` debe estar persistida antes de añadirla.
-17. **Sin bloqueo optimista ni pesimista** en ninguna entidad. Los votos concurrentes de canciller
+17. ~~**Las `Law` de los mazos no tienen cascade.**~~ **Corregido (2026-08-29).** Era un bug real y
+    bloqueante —`initializeLawDeck()` crea las leyes con `new Law(...)` y reventaba con
+    `TransientPropertyValueException` en el primer flush, así que ninguna partida podía empezar—, y
+    los tests no lo veían porque sembraban el mazo con leyes ya persistidas. Ahora
+    `Game.lawPickDeck`/`lawDiscardDeck` llevan `cascade = ALL`. **`Round.roundAvailableLaws` sigue
+    sin cascade a propósito**: comparte la ley sobrante con el mazo de descartes y la ronda se borra
+    en cada `nextRound()`.
+18. **Sin bloqueo optimista ni pesimista** en ninguna entidad. Los votos concurrentes de canciller
     dependen enteramente del aislamiento transaccional de la BD.
-18. **`setRoundPresident` busca al siguiente presidente por `joinOrder` exacto**; como `joinOrder`
+19. **`setRoundPresident` busca al siguiente presidente por `joinOrder` exacto**; como `joinOrder`
     no se compacta cuando alguien sale del lobby, un hueco podría lanzar `PlayerDoesntExistsException`
     (solo alcanzable antes de empezar, porque no se puede salir con la partida `STARTED`).
 
 ### Commons-Telegram
 
-19. **Los dos starters de telegrambots chocan.** Ambos declaran un bean `telegramBotsApplication`
+20. **Los dos starters de telegrambots chocan.** Ambos declaran un bean `telegramBotsApplication`
     y Spring Boot 4 no permite sobrescritura de beans. Hay que excluir los dos autoconfigs
     (`spring.autoconfigure.exclude`) y dejar que `TelegramBotsRegistrarConfig` los sustituya.
-20. **El starter de webhook no publica ningún endpoint HTTP.** Sin `TelegramWebhookController`
+21. **El starter de webhook no publica ningún endpoint HTTP.** Sin `TelegramWebhookController`
     la aplicación arranca limpiamente en modo webhook y no recibe absolutamente nada.
-21. **`BotMessageServiceImpl` se traga todas las `TelegramApiException`**: solo las loguea. Un envío
+22. **`BotMessageServiceImpl` se traga todas las `TelegramApiException`**: solo las loguea. Un envío
     fallido es invisible para quien lo llamó.
-22. **Todo trabajo asíncrono necesita `TelegramSession.capture()` / `session.run(...)`.** La
+23. **Todo trabajo asíncrono necesita `TelegramSession.capture()` / `session.run(...)`.** La
     continuación de un `CompletableFuture` corre en otro hilo, sin `SecurityContextHolder` ni
     `TelegramContextHolder`: el motor no encontraría usuario y el bot no sabría a qué chat responder.
-23. **`models.CallbackQuery` colisiona de nombre** con el `CallbackQuery` del SDK de Telegram
+24. **`models.CallbackQuery` colisiona de nombre** con el `CallbackQuery` del SDK de Telegram
     (que es el tipo que reciben de verdad los handlers). Es fácil importar el equivocado.
-24. **`BotResponseErrorI18n` no está internacionalizado**: son tres literales españoles hardcodeados,
+25. **`BotResponseErrorI18n` no está internacionalizado**: son tres literales españoles hardcodeados,
     a pesar del nombre.
-25. **Los registros en memoria son por JVM.** `PendingReplyRegistry` y `SelectionRegistry` son
+26. **Los registros en memoria son por JVM.** `PendingReplyRegistry` y `SelectionRegistry` son
     `ConcurrentHashMap` locales: se pierden al reiniciar y no se comparten entre réplicas. Un flujo
     empezado en una instancia no se puede terminar en otra.
-26. **`setPendingReply` sobrescribe en silencio** cualquier respuesta pendiente previa de ese chat.
-27. **El formato de `callback_data` no se valida**: la convención `__` se confía, no se impone.
-28. **No hay rate limiting** en ninguna parte de la capa de mensajería.
-29. **Los objetos de telegrambots no se pueden deserializar con el Jackson de Spring Boot 4.**
+27. **`setPendingReply` sobrescribe en silencio** cualquier respuesta pendiente previa de ese chat.
+28. **El formato de `callback_data` no se valida**: la convención `__` se confía, no se impone.
+29. **No hay rate limiting** en ninguna parte de la capa de mensajería.
+30. **Los objetos de telegrambots no se pueden deserializar con el Jackson de Spring Boot 4.**
     Spring Boot 4 convierte JSON con **Jackson 3** (`tools.jackson.*`); telegrambots 10 sigue
     compilado contra **Jackson 2** (`com.fasterxml.jackson.*`), y ambos viajan en el fat jar.
     Las anotaciones de `jackson-annotations` (`@JsonProperty`) no cambiaron de paquete y siguen
@@ -529,29 +559,29 @@ Válidas en **todo** el reactor salvo donde se indique:
 
 ### CAH-Telegram
 
-30. **Los ids de mensaje hay que recogerlos ANTES de que el motor borre la partida.** Todas las
+31. **Los ids de mensaje hay que recogerlos ANTES de que el motor borre la partida.** Todas las
     rutas de borrado/fin de partida guardan primero los ids de `TelegramGame`/`TelegramPlayer`,
     porque una vez borrada la fila padre las relaciones JPA ya no se pueden recorrer.
-31. **Las claves de comando y de callback son contrato con lo ya desplegado.** Telegram guarda los
+32. **Las claves de comando y de callback son contrato con lo ya desplegado.** Telegram guarda los
     botones dentro de los mensajes para siempre: renombrar una clave rompe partidas en curso.
     `CCLHApplicationServiceTest` y `DictionariesApplicationServiceTest` fijan los conjuntos exactos
     de claves precisamente por eso.
-32. **`cah.game.default-dictionary-id` apunta a un UUID fijo**
+33. **`cah.game.default-dictionary-id` apunta a un UUID fijo**
     (`00000000-0000-4000-a000-000000000001`) que solo existe si se ha ejecutado
     `tools/legacy_data_migration.py`. Una BD recién creada **no puede crear partidas**.
-33. **El baseline SQL es generado, no se edita a mano.** Se regenera con
+34. **El baseline SQL es generado, no se edita a mano.** Se regenera con
     `src/test/java/.../tools/SchemaGenerator.java` cuando cambian las entidades;
     `ddl-auto=validate` + `SchemaBaselineTest` cierran el bucle y fallan si hay deriva.
-34. **H2 y MariaDB divergen en constraints, no solo en tipos.** Varios `unique` presentes en H2
+35. **H2 y MariaDB divergen en constraints, no solo en tipos.** Varios `unique` presentes en H2
     (`game.creator_id`, `game.room_id`, `card_id` en las tablas de mazo) **no están en MariaDB**.
     Es una divergencia real de esquema entre dialectos, no cosmética.
-35. **En Spring Boot 4 la autoconfiguración de Flyway vive en su propio módulo.** Sin
+36. **En Spring Boot 4 la autoconfiguración de Flyway vive en su propio módulo.** Sin
     `spring-boot-flyway`, `flyway-core` está en el classpath pero **no se ejecuta ninguna migración**.
-36. **Llamadas de red a Telegram dentro de transacciones de BD.** Es seguro bajo long-polling
+37. **Llamadas de red a Telegram dentro de transacciones de BD.** Es seguro bajo long-polling
     (los updates se procesan de uno en uno), pero es un riesgo real bajo webhook: peticiones HTTP
     concurrentes podrían agotar el pool de conexiones. Marcado como pendiente ("R4") en el plan,
     deliberadamente sin tocar hasta poder medirlo.
-37. **El webhook ya recibe updates reales, pero nada aguas abajo está probado contra Telegram.**
+38. **El webhook ya recibe updates reales, pero nada aguas abajo está probado contra Telegram.**
     Desde el despliegue del 2026-08-28 hay bot real: `setWebhook` funciona, el TLS y el enrutado
     `/callback/{botPath}` funcionan, y Telegram entrega updates que llegan hasta
     `TelegramWebhookController`. Ahí se quedaban todos, reventando al deserializar (ver el gotcha
@@ -614,11 +644,17 @@ idiomas tengan exactamente el mismo número de tags.
 **Ejecutar los tests**
 `mvn -Ptest test` desde la raíz (sin el perfil `test` no se ejecuta ninguno).
 
-**Empezar SH-Telegram**
-No existe. El patrón a copiar es `CAH-Telegram` entero: implementa `ApplicationService`
-(mapas de comandos y callbacks), opcionalmente `TelegramRoomResolver`, declara los beans
-`TelegramClient → BotMessageService → ApplicationService → bot` en esa dirección, y añade
-tablas `telegram_*` propias para los ids de mensaje. Todo `SHService` está listo para consumirse.
+**Seguir con SH-Telegram**
+El esqueleto ya está (S0–S3 del plan): módulo, entidades `telegram_*`, DAOs, cableado del bot,
+resolutor de salas, esquema generado para H2 y MariaDB, catálogo i18n y la tabla de comandos y
+callbacks completa con su test de contrato. Lo que falta es el comportamiento: rellenar
+`SHTelegramServiceImpl`, cuyos métodos hoy solo avisan por el log. Empezar por el lobby (S4), seguir
+por la ronda (S5) y terminar por los poderes y el veto (S6), según
+[docs/specs/SH-Telegram-PLAN.md](specs/SH-Telegram-PLAN.md).
+
+**Levantar SH-Telegram en local**
+`mvn -Pdev spring-boot:run` desde `SH-Telegram/`. Arranca en el puerto 8081 contra H2 en fichero y
+con el bot **deshabilitado**; hay que dar un token real para encenderlo.
 
 ---
 

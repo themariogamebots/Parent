@@ -31,6 +31,7 @@
         <module>SH-Engine</module>
         <module>Commons-Telegram</module>
         <module>CAH-Telegram</module>
+        <module>SH-Telegram</module>
     </modules>
 
     <properties>
