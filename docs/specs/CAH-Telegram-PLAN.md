@@ -901,6 +901,34 @@ caracteres, la mayor de 1055**, cuando el propio `default-formatter-config.xml` 
 perfil ejecuta `format` (que modifica ficheros), quien lo lance se lleva por delante el formato de
 todo el reactor. **Hay que arreglar el config antes de volver a usarlo.**
 
+**Arreglado después, desde S7 de SH-Telegram (2026-08-29): los dos comandos de borrado ajeno no
+funcionaban.** Se descubrió al escribirlos para Secret Hitler, porque allí sí se probaron. Eran dos
+fallos encadenados y ninguno de los dos tenía test:
+
+1. `CAHServiceImpl.checkSessionUserIsCreator` solo aceptaba al creador, sin salida para quien
+   administra. Así, `/deletegamebyusername` no podía borrar la partida de nadie más y
+   `/deleteallgames` no borraba **ninguna** — y encima en silencio, porque su bucle registra el error
+   de cada partida y sigue con la siguiente para no parar en la primera. Ahora `SecurityUtils.isAdmin()`
+   es una salida temprana de esa comprobación, que es lo que "administrador" quiere decir aquí, y
+   sigue siendo el motor quien impone quién puede actuar.
+2. `requireAdmin()` estaba **delante** del `guarded(...)` en los cuatro comandos de administración,
+   así que a quien lo intentaba sin ser administrador no se le contestaba nada: la excepción se
+   escapaba a la tabla de comandos, que solo la apunta en el log. Ahora va dentro, y
+   `ErrorMessageResolver` la traduce. De paso, `/deletegamebyusername` con un alias que no existe ya
+   da "usuario no encontrado" en vez de tropezar con un `null`.
+
+3. **`sendMessageToEveryone` no medía el mensaje antes de salir**, y cada envío que Telegram rechaza
+   marca ese chat como inactivo: un `/sendmessagetoeveryone` sin texto —o de más de 4096
+   caracteres— daba de baja a **todos** los usuarios y salas de la base de datos de una tacada.
+   Ahora se para en seco y se avisa a quien administra (tag nuevo `ERROR_MESSAGE_TOO_LONG`, en los
+   dos idiomas y los dos dialectos; total 216). De paso, el "se han enviado todos los mensajes" pasa
+   de la tabla de comandos al servicio: allí se decía siempre, incluso cuando no se había enviado
+   nada, y ahora solo se dice cuando la difusión ha corrido de verdad.
+
+`AdminFlowTest` (7 tests, nuevo) cubre los dos lados de la puerta en los tres comandos y los dos
+mensajes que no valen, y `CAHServiceTest` gana el del motor. **208 tests** en `CAH-Engine` y **57**
+en `CAH-Telegram`.
+
 Sobre R4 (llamadas a Telegram dentro de la transacción): sigue igual, a propósito. En long-polling no
 puede agotar el pool porque se atiende un update cada vez; en webhook sí es un riesgo real, pero es
 justo el modo que no se puede medir todavía. Tocarlo a ciegas cambiaría el orden de los envíos
