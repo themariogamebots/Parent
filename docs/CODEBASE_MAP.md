@@ -6,7 +6,7 @@ total_tokens: 360581
 
 # Codebase Map — CCLH (superproyecto)
 
-> Generado por Cartographer. Última actualización: 2026-08-28.
+> Generado por Cartographer. Última actualización: 2026-08-29.
 >
 > Este es el mapa **del superproyecto**. Cada submódulo tiene además su propio
 > `<Módulo>/docs/CODEBASE_MAP.md` con el detalle fino. Ver
@@ -14,9 +14,10 @@ total_tokens: 360581
 > [§ Estado de los mapas por módulo](#estado-de-los-mapas-por-módulo), porque
 > varios de ellos contienen afirmaciones ya obsoletas.
 
-CCLH es un reactor Maven de **cinco submódulos git** que implementa bots de Telegram
-para dos juegos de cartas: **Cartas Contra la Humanidad** (CAH, desplegable y en uso)
-y **Secret Hitler** (SH, motor completo pero sin capa de bot todavía).
+CCLH es un reactor Maven de **seis submódulos git** que implementa bots de Telegram
+para dos juegos de cartas: **Cartas Contra la Humanidad** (CAH) y **Secret Hitler** (SH).
+Los dos tienen ya su aplicación desplegable; a ninguna de las dos le falta más que la
+prueba contra un bot real.
 
 - **Stack**: Java 17+ · Spring Boot 4.1.0 · Hibernate 6 / JPA (`jakarta.persistence`) ·
   Spring Security · Flyway · telegrambots 10.0.0 · JUnit 5 · Mockito · DBUnit · H2 (dev/test) / MariaDB (pre/pro)
@@ -66,10 +67,11 @@ graph TB
 El orden del reactor (raíz `pom.xml`) es exactamente el de las flechas:
 `Commons-Engine → CAH-Engine → SH-Engine → Commons-Telegram → CAH-Telegram → SH-Telegram`.
 
-**`SH-Telegram` está a medias** (desde 2026-08-29): tiene módulo, esquema propio, catálogo i18n,
-cableado del bot y la tabla de comandos y callbacks completa, pero el comportamiento —lobby, ronda y
-poderes— llega en las fases S4 a S6 de [docs/specs/SH-Telegram-PLAN.md](specs/SH-Telegram-PLAN.md).
-Todavía no expone Secret Hitler a usuarios.
+**`SH-Telegram` está funcionalmente completo** (2026-08-29): lobby, ronda entera, los cinco poderes
+ejecutivos, el veto, las cuatro condiciones de victoria y los comandos de administración, con 82
+tests. Lo único que le falta, igual que a `CAH-Telegram`, es la prueba contra un bot de Telegram
+real: long polling primero y webhook después. Ver
+[docs/specs/SH-Telegram-PLAN.md](specs/SH-Telegram-PLAN.md).
 
 **Dos despliegues, dos bases de datos.** `CAH-Telegram` y `SH-Telegram` no comparten base de datos:
 `cah.models.game.Game` y `sh.models.Game` son las dos `@Entity` con el mismo nombre simple y, con la
@@ -84,7 +86,9 @@ CCLH/                         superproyecto: pom padre + BOM, 5 submódulos git
 ├── pom.xml                   parent org.themarioga:parent:2.0.0 (hereda de spring-boot-starter-parent:4.1.0)
 ├── docs/
 │   ├── CODEBASE_MAP.md       este fichero
-│   └── CAH-Telegram-PLAN.md  plan de refactor por fases F0–F8 (F7 parcial)
+│   └── specs/
+│       ├── CAH-Telegram-PLAN.md  plan de refactor por fases F0–F8 (F7 parcial)
+│       └── SH-Telegram-PLAN.md   plan de SH-Telegram por fases S0–S8
 │
 ├── Commons-Engine/           librería base, sin main()
 │   └── src/main/java/org/themarioga/commons/engine/
@@ -106,7 +110,7 @@ CCLH/                         superproyecto: pom padre + BOM, 5 submódulos git
 │   │   └── config/           GameConfig (cah.game.*), DictionariesConfig (cah.dictionaries.*)
 │   └── docs/legacy-db-migration/   SQL histórico, NO en el classpath
 │
-├── SH-Engine/                reglas de Secret Hitler, sin capa de bot
+├── SH-Engine/                reglas de Secret Hitler
 │   └── src/main/java/org/themarioga/engine/sh/
 │       ├── models/           Game, Player, Round, Law
 │       ├── dao/{intf,impl}/  GameDao, PlayerDao, RoundDao
@@ -124,17 +128,27 @@ CCLH/                         superproyecto: pom padre + BOM, 5 submódulos git
 │       ├── constants/        BotResponseErrorI18n (¡no está internacionalizado!)
 │       └── util/             BotMessageUtils, BotCreationUtils
 │
-└── CAH-Telegram/             LA APLICACIÓN DESPLEGABLE
-    ├── src/main/java/org/themarioga/telegram/cah/
-    │   ├── CAHTelegramApplication.java     @SpringBootApplication, punto de entrada
-    │   ├── config/           CAHTelegramBotsConfig, SecurityConfig, BotProperties, ErrorMessageResolver
-    │   ├── game/{app,service}/            bot "cclh": 9 comandos + 21 callbacks
-    │   ├── dictionaries/{app,service}/    bot "dictionaries": 27 comandos + 29 callbacks
+├── CAH-Telegram/             APLICACIÓN DESPLEGABLE (dos bots)
+│   ├── src/main/java/org/themarioga/telegram/cah/
+│   │   ├── CAHTelegramApplication.java     @SpringBootApplication, punto de entrada
+│   │   ├── config/           CAHTelegramBotsConfig, SecurityConfig, BotProperties, ErrorMessageResolver
+│   │   ├── game/{app,service}/            bot "cclh": 9 comandos + 21 callbacks
+│   │   ├── dictionaries/{app,service}/    bot "dictionaries": 27 comandos + 29 callbacks
+│   │   ├── models/           TelegramGame, TelegramPlayer, TelegramRoom
+│   │   └── dao/, services/, exceptions/
+│   ├── src/main/resources/db/migration/{h2,mariadb}/V2/   esquema de CAH
+│   ├── src/test/java/.../tools/SchemaGenerator.java       genera el baseline SQL
+│   └── tools/legacy_data_migration.py                     CSV v0.1.0 → SQL
+│
+└── SH-Telegram/              APLICACIÓN DESPLEGABLE (un bot)
+    ├── src/main/java/org/themarioga/telegram/sh/
+    │   ├── SHTelegramApplication.java      @SpringBootApplication, punto de entrada
+    │   ├── config/           SHTelegramBotsConfig, SecurityConfig, BotProperties, ErrorMessageResolver
+    │   ├── game/{app,service}/            bot "sh": 9 comandos + 23 callbacks
     │   ├── models/           TelegramGame, TelegramPlayer, TelegramRoom
     │   └── dao/, services/, exceptions/
-    ├── src/main/resources/db/migration/{h2,mariadb}/V3/   ESQUEMA CANÓNICO
-    ├── src/test/java/.../tools/SchemaGenerator.java       genera el baseline SQL
-    └── tools/legacy_data_migration.py                     CSV v0.1.0 → SQL V3
+    ├── src/main/resources/db/migration/{h2,mariadb}/V1/   esquema propio de SH
+    └── src/test/java/.../tools/SchemaGenerator.java       genera el baseline SQL
 ```
 
 ---
@@ -218,9 +232,9 @@ Hitler ejecutado · Hitler elegido canciller con ≥3 leyes fascistas · ley aut
 **Poderes ejecutivos**: `INVESTIGATE_LOYALTY`, `SPECIAL_ELECTION`, `POLICY_PEEK`,
 `EXECUTION`, `ENABLE_VETO` — todos implementados y con test.
 
-**Dependencias**: `commons-engine`. **Dependientes**: `SH-Telegram` (desde 2026-08-29).
+**Dependencias**: `commons-engine`. **Dependientes**: `SH-Telegram`, su única aplicación.
 
-**Estado**: funcionalmente completo y con tests (85 en el módulo). Sin migraciones Flyway propias
+**Estado**: funcionalmente completo y con tests (89 en el módulo). Sin migraciones Flyway propias
 —las tiene `SH-Telegram`—, y los textos de `SHErrorEnum` son literales españoles a propósito: son el
 mensaje interno, y el que ve el usuario sale de la tabla `tag` por la convención `ERROR_<NOMBRE>`.
 
@@ -259,8 +273,8 @@ que juegan en grupos.
 
 ### CAH-Telegram
 
-**Propósito**: la aplicación Spring Boot desplegable. Arranca **dos bots independientes**
-en un mismo proceso y posee el **esquema de base de datos canónico** de todo el reactor.
+**Propósito**: una de las dos aplicaciones Spring Boot desplegables. Arranca **dos bots
+independientes** en un mismo proceso y posee su propio esquema de base de datos.
 
 **Entry point**: `CAHTelegramApplication` (`@SpringBootApplication(scanBasePackages="org.themarioga")`,
 `@EntityScan("org.themarioga")`).
@@ -278,13 +292,39 @@ Ambos con `@ConditionalOnProperty` (`cclh.bot.enabled`, `dictionaries.bot.enable
 | Bot de juego | `game/app/CCLHApplicationServiceImpl`, `game/service/impl/CCLHTelegramServiceImpl` |
 | Bot de diccionarios | `dictionaries/app/DictionariesApplicationServiceImpl`, `dictionaries/service/impl/DictionariesTelegramServiceImpl` |
 | Modelos propios | `TelegramGame` (ids de mensaje: first/creator/currentRound), `TelegramPlayer` (`handMessageId`), `TelegramRoom` (`"tg:<chatId>"` → `Room`) |
-| Esquema | `db/migration/{h2,mariadb}/V3/V3.0.0_1__Baseline.sql` (generado, 20 tablas) + `V2.0.0_2__Languages_and_tags.sql` (215 tags × 2 idiomas = 430 filas) |
+| Esquema | `db/migration/{h2,mariadb}/V2/V2.0.0_1__Baseline.sql` (generado, 20 tablas) + `V2.0.0_2__Languages_and_tags.sql` (216 tags × 2 idiomas) |
 | Herramientas | `tools/legacy_data_migration.py` (CSV → SQL), `src/test/.../tools/SchemaGenerator.java` (entidades JPA → DDL) |
 
 **Perfiles**: `dev` (H2 en fichero, bots apagados), `pre` (MariaDB, sin SSL, tras proxy),
 `pro` (MariaDB, SSL + Let's Encrypt, Flyway activado).
 
-**Dependencias**: `cah-engine`, `commons-telegram`, Flyway. **Dependientes**: ninguno (es la cima).
+**Dependencias**: `cah-engine`, `commons-telegram`, Flyway. **Dependientes**: ninguno (es una cima).
+
+### SH-Telegram
+
+**Propósito**: la otra aplicación desplegable. Un solo bot —Secret Hitler no tiene el equivalente al
+de diccionarios de CAH— y su propio esquema, en su propia base de datos.
+
+**Entry point**: `SHTelegramApplication` (`@SpringBootApplication(scanBasePackages="org.themarioga")`,
+`@EntityScan("org.themarioga")`).
+
+| Bot | Ámbito | Superficie |
+|---|---|---|
+| `sh` (juego) | grupo (la mesa) + privado de cada jugador | 9 comandos, 23 callbacks |
+
+| Área | Clases clave |
+|---|---|
+| Wiring | `SHTelegramBotsConfig`, `SecurityConfig`, `BotProperties` (`sh.telegram.*`), `ErrorMessageResolver` |
+| Bot | `game/app/SHApplicationServiceImpl`, `game/service/impl/SHTelegramServiceImpl` |
+| Modelos propios | `TelegramGame` (ids de mensaje: first/creator/**board**/currentRound), `TelegramPlayer` (`roleMessageId`, `actionMessageId`), `TelegramRoom` |
+| Esquema | `db/migration/{h2,mariadb}/V1/V1.0.0_1__Baseline.sql` (generado, 17 tablas) + `V1.0.0_2__Languages_and_tags.sql` (145 tags × 2 idiomas) |
+
+**Lo que lo distingue del bot de CAH**: aquí casi todo es secreto. El rol, las leyes que ve el
+presidente, el partido que revela una investigación y las tres leyes que se espían del mazo van solo
+al privado de una persona; mandar una de esas cosas al grupo arruina la partida entera. Los tests
+están escritos alrededor de esa invariante, no alrededor de "se envía algo".
+
+**Dependencias**: `sh-engine`, `commons-telegram`, Flyway. **Dependientes**: ninguno (es la otra cima).
 
 ---
 
@@ -517,6 +557,9 @@ Válidas en **todo** el reactor salvo donde se indique:
 19. **`setRoundPresident` busca al siguiente presidente por `joinOrder` exacto**; como `joinOrder`
     no se compacta cuando alguien sale del lobby, un hueco podría lanzar `PlayerDoesntExistsException`
     (solo alcanzable antes de empezar, porque no se puede salir con la partida `STARTED`).
+    ~~Y no comprobaba que el jugador siguiera vivo.~~ **Eso último, corregido (2026-08-29):** tras una
+    ejecución podía tocarle presidir a un muerto. Ahora la rotación da la vuelta a la mesa saltándose
+    a los ejecutados, y el contador se fija con quien acaba presidiendo, no con la casilla que tocaba.
 
 ### Commons-Telegram
 
@@ -644,13 +687,10 @@ idiomas tengan exactamente el mismo número de tags.
 **Ejecutar los tests**
 `mvn -Ptest test` desde la raíz (sin el perfil `test` no se ejecuta ninguno).
 
-**Seguir con SH-Telegram**
-El esqueleto ya está (S0–S3 del plan): módulo, entidades `telegram_*`, DAOs, cableado del bot,
-resolutor de salas, esquema generado para H2 y MariaDB, catálogo i18n y la tabla de comandos y
-callbacks completa con su test de contrato. Lo que falta es el comportamiento: rellenar
-`SHTelegramServiceImpl`, cuyos métodos hoy solo avisan por el log. Empezar por el lobby (S4), seguir
-por la ronda (S5) y terminar por los poderes y el veto (S6), según
-[docs/specs/SH-Telegram-PLAN.md](specs/SH-Telegram-PLAN.md).
+**Lo único que le falta a las dos aplicaciones**
+Probarlas contra Telegram de verdad: long polling con un token real primero, webhook después. Es el
+punto abierto en F7 del plan de CAH y en S7 del de SH, y no se puede cerrar sin un bot y un
+despliegue reales.
 
 **Levantar SH-Telegram en local**
 `mvn -Pdev spring-boot:run` desde `SH-Telegram/`. Arranca en el puerto 8081 contra H2 en fichero y
@@ -667,10 +707,13 @@ con el bot **deshabilitado**; hay que dar un token real para encenderlo.
 | SH-Engine | `SH-Engine/docs/CODEBASE_MAP.md` |
 | Commons-Telegram | `Commons-Telegram/docs/CODEBASE_MAP.md` |
 | CAH-Telegram | `CAH-Telegram/docs/CODEBASE_MAP.md` |
+| SH-Telegram | `SH-Telegram/docs/CODEBASE_MAP.md` |
 
 Además, `specs/CAH-Telegram-PLAN.md` documenta el plan de refactor por fases F0–F8
 (todas cerradas salvo F7, parcial: falta prueba manual contra Telegram, validación de
-webhook extremo a extremo, y la revisión "R4" de red-dentro-de-transacción).
+webhook extremo a extremo, y la revisión "R4" de red-dentro-de-transacción), y
+`specs/SH-Telegram-PLAN.md` el de SH-Telegram por fases S0–S8 (todas cerradas salvo esa
+misma prueba en vivo).
 
 ### Estado de los mapas por módulo
 
@@ -692,8 +735,11 @@ Al verificar cada afirmación contra el código actual aparecieron varias **obso
 | SH-Engine | Jerarquía de excepciones partida | Unificada bajo `ApplicationException` |
 | SH-Engine | Sin propiedades `sh.game.*`, todo a 0 | Presentes en la config de test |
 | SH-Engine | Colisión de tabla `roundAvailableLaws`/`lawPickDeck` | Tabla propia `round_available_laws` |
-| CAH-Telegram | Stack "JUnit 5 + Mockito" | Ningún test usa Mockito: son 11 `@SpringBootTest` contra H2 con un doble grabador (`RecordingBotMessageService`) |
+| CAH-Telegram | Stack "JUnit 5 + Mockito" | Ningún test usa Mockito: son `@SpringBootTest` contra H2 con un doble grabador (`RecordingBotMessageService`) |
+| CAH-Telegram | Migraciones en `V3/`, 215 tags | Están en `V2/`, y son 216 desde el freno de la difusión |
+| SH-Engine | "sin capa de bot" / "sin consumidor" | `SH-Telegram` lo consume desde 2026-08-29 |
 
-Los mapas de **Commons-Telegram** y **CAH-Telegram** se verificaron línea a línea y sus
-"Gotchas" son exactos (salvo la nota de Mockito). Conviene regenerar los de
-**Commons-Engine**, **CAH-Engine** y **SH-Engine**.
+El mapa de **SH-Telegram** se escribió el 2026-08-29, con el módulo ya terminado, así que está al
+día. Los de **Commons-Telegram** y **CAH-Telegram** se verificaron línea a línea y sus "Gotchas" son
+exactos (salvo las dos notas de la tabla). Conviene regenerar los de **Commons-Engine**,
+**CAH-Engine** y **SH-Engine**.

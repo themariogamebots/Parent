@@ -3,7 +3,7 @@
 > Proyecto nuevo `SH-Telegram`: capa de presentación/entrada de Telegram sobre `SH-Engine`.
 > Parent: `org.themarioga:parent:2.0.0` (el BOM del reactor). Dependencias: `Commons-Telegram` + `sh-engine`.
 > Fecha: 2026-08-29 · Decisiones de diseño: **cerradas** (§3) · Hermano mayor: [CAH-Telegram-PLAN.md](CAH-Telegram-PLAN.md)
-> Estado: **S0, S1, S2 y S3 hechas** (2026-08-29) · siguiente: S4
+> Estado: **cerrado, S0 a S8** (2026-08-29) · único punto abierto: la prueba contra un bot real (S7)
 
 ---
 
@@ -451,7 +451,9 @@ para que no se confundan con los del lobby, que son calcados a los de CAH.
 | `game_menu` | — | grupo | cualquiera |
 | `game_configure` | — | grupo | creador |
 | `game_sel_max_players` | — | privado creador | creador |
-| `game_change_max_players` | 5–10 | privado creador | creador |
+| `game_change_max_players` | 5–10 | grupo | creador |
+| `game_sel_kick` | — | grupo | creador |
+| `game_kick` | UUID de usuario | grupo | creador |
 | `game_join` | — | grupo | cualquiera registrado |
 | `game_leave` | — | grupo | jugador |
 | `game_start` | — | grupo | creador |
@@ -469,7 +471,10 @@ para que no se confundan con los del lobby, que son calcados a los de CAH.
 | `sh_kill` | UUID de jugador | privado presidente | presidente |
 | `sh_next_round` | — | grupo | cualquier jugador |
 
-`POLICY_PEEK` y `ENABLE_VETO` no tienen callback: no piden elección, se ejecutan y se anuncian.
+`ENABLE_VETO` no tiene callback: no pide elección, lo activa el motor solo al promulgar la quinta
+ley fascista y el bot solo lo anuncia. `POLICY_PEEK` tampoco elige a nadie, pero **sí** necesita
+botón (`sh_action__POLICY_PEEK`): el motor comprueba quién actúa contra la sesión, y quien acaba de
+promulgar es el canciller, no el presidente. Ver los hallazgos de S6.
 
 La columna "quién puede" la impone **el motor** tras S1 (D6); el bot no repite la comprobación, solo
 traduce el error con `ErrorMessageResolver`. Lo que sí hace el bot es no ofrecer el botón a quien no
@@ -774,52 +779,213 @@ Decisiones de la fase:
 - **El test de claves comprueba además que ninguna lleve `__`**, que es el separador que usa el
   dispatcher para partir clave y datos: una clave con `__` dentro nunca se encontraría en el mapa.
 
-### S4 — Lobby (2 jornadas)
+### S4 — Lobby (2 jornadas) ✅ HECHA
 
-- [ ] `/start`, `/lang`, `/create`, `/help`.
-- [ ] Menú de grupo, configuración del creador (nº máximo de jugadores), unirse, salir, echar,
-      empezar, borrar y voto de borrado.
-- [ ] Reparto de roles por privado (D8) con `sendMessageAsync` + `TelegramSession`.
-- [ ] Tablero inicial en el grupo.
+- [x] `/start`, `/lang`, `/create`, `/help`.
+- [x] Menú de grupo, configuración del creador (nº máximo de jugadores y expulsar), unirse, salir,
+      echar, empezar, borrar y voto de borrado.
+- [x] Reparto de roles por privado, con la regla de D8.
+- [x] Tablero inicial en el grupo, en su propio mensaje.
 
-**Aceptación:** test de flujo — cinco jugadores se registran, se unen, la partida arranca, cada uno
-recibe su rol, y el mensaje del grupo **no contiene ningún rol** (R2).
+**Aceptación:** ✅ **46 tests** en el módulo (13 nuevos de flujo). Cinco jugadores se registran, se
+unen, la partida arranca, cada uno recibe su rol por privado y el grupo recibe el tablero; y
+`nothingSecretReachesTheGroup` comprueba que nada de lo secreto acaba en el grupo (R2).
 
-### S5 — Ronda base (3–4 jornadas)
+Decisiones y hallazgos de la fase:
 
-- [ ] Nominación, votación (con revelado al cerrar), sesión legislativa, avance de ronda.
-- [ ] Las tres ramificaciones por estado de §8.3, incluida la ley automática de la tercera elección
-      fallida y que **esa ley puede terminar la partida**.
-- [ ] Fin de partida en el orden exacto de §8.3.
+- **Aparecen dos claves nuevas, `game_sel_kick` y `game_kick`.** Echar a un jugador estaba en el
+  guion de esta fase pero no en la tabla de §8, así que el contrato que fijó S3 se ha ampliado —y el
+  test de claves con él. Es exactamente el momento de hacerlo: **mientras no se despliegue, las
+  claves son gratis**; después, cada una es para siempre.
+- **El reparto de roles no necesita envíos asíncronos**, al contrario de lo que preveía el plan: el
+  privado de cada jugador ya existe desde que se unió (es el mensaje "te has unido"), así que basta
+  con editarlo. Lo asíncrono se queda para el tablero, que sí es un mensaje nuevo del que hay que
+  quedarse el identificador.
+- **`role_message_id` se crea al unirse, no al repartir.** Es el mismo mensaje: primero dice "te has
+  unido" con el botón de salir, y al arrancar la partida se sobrescribe con el rol. Por eso la
+  columna puede ser `NOT NULL`.
+- **`Player.getGame()` devuelve la `Game` de commons, no la de SH** (el modelo de SH no redefine el
+  getter con el tipo concreto), así que la partida de un jugador se recupera por su sala. En CAH no
+  se nota porque su `Player` sí lo redefine.
+- **La configuración es más corta que en CAH**: en Secret Hitler lo único configurable es el número
+  máximo de jugadores. El resto de la mesa lo fijan las reglas.
+- Al terminar esta fase el grupo se queda con el tablero y sin nada que pulsar: la nominación del
+  primer canciller es lo primero que hace S5.
 
-**Aceptación:** test de flujo de una partida completa sin poderes ejecutivos (solo leyes liberales),
-hasta la victoria liberal, con la comprobación de fuga de R2 en cada paso.
+### S5 — Ronda base (3–4 jornadas) ✅ HECHA
 
-### S6 — Poderes ejecutivos y veto (2 jornadas)
+- [x] Nominación (privado del presidente), votación en el grupo con revelado al cerrarse, sesión
+      legislativa (privado del presidente y del canciller) y avance de ronda.
+- [x] Las tres ramificaciones por estado de §8.3, la ley automática de la tercera elección fallida
+      incluida, con su aviso en el grupo.
+- [x] Fin de partida en el orden exacto de §8.3: leer y recoger, anunciar, limpiar, borrar.
 
-- [ ] `sh_action` cuando hay más de un poder disponible (el caso de las 5 leyes fascistas).
-- [ ] `INVESTIGATE_LOYALTY`, `SPECIAL_ELECTION`, `POLICY_PEEK`, `EXECUTION`, `ENABLE_VETO`.
-- [ ] Propuesta y resolución de veto.
+**Aceptación:** ✅ **54 tests** en el módulo. `aFullGameIsPlayedUntilTheLiberalsWin` juega una partida
+entera ronda a ronda hasta la victoria liberal, y `noPrivateDecisionIsEverOfferedInTheGroup`
+comprueba a lo largo de toda ella que ninguna decisión privada se ofrece en el grupo (R2).
 
-**Aceptación:** tests de flujo de las cuatro victorias (5 liberales, 6 fascistas, Hitler ejecutado,
-Hitler canciller) y de cada poder, comprobando que el resultado de investigar y de espiar el mazo
-**solo** llega al privado del presidente.
+Decisiones y hallazgos de la fase:
 
-### S7 — Administración, ayuda y endurecimiento (1–2 jornadas)
+- **La votación va en el grupo y el sentido del voto se revela de golpe.** Mientras está abierta solo
+  se dice cuántos han votado: un recuento parcial delataría el voto del último. Al cerrarse se lista
+  quién votó qué, que en Secret Hitler es información pública.
+- **Quien decide qué toca después es el estado de la ronda, no el bot.** El motor cierra la votación
+  con el último voto que faltaba y deja la ronda en `CHANCELLOR_REJECTED`,
+  `HITLER_ELECTED_CHANCELLOR` o `PRESIDENT_DISCARDING_LAW`; el bot solo lee y ramifica. Igual tras
+  promulgar.
+- **La regla del caos hay que detectarla comparando el recuento de leyes** antes y después de
+  `nextRound()`: el motor la aplica en silencio y no devuelve nada que diga que lo ha hecho.
+- **El contador de elecciones fallidas se enseña +1 al rechazar el gobierno**, porque el motor no lo
+  avanza hasta el `nextRound` siguiente y al jugador hay que enseñarle ya cómo queda la cosa.
+- **Cada ronda estrena mensaje en el grupo** y se va editando dentro de la ronda; el tablero es otro
+  mensaje aparte, que se edita cuando cambia. Así no se entierra bajo la conversación.
+- **Los mensajes de acción privados se cierran al usarse**: se guarda su identificador en
+  `telegram_player.action_message_id` y al actuar se sobrescriben con la confirmación, para que no
+  queden botones vivos de una fase ya pasada.
+- **El test tiene que forzar el mazo a leyes liberales.** El motor lo baraja, así que sin eso una ley
+  fascista desbloquearía un poder a mitad de partida y el test se quedaría esperando a S6 — y no
+  habría forma determinista de llegar a la victoria liberal.
+- **Trampa de Hibernate en los tests**: recorrer `game.getPlayers()` mientras se vota lanza
+  `ConcurrentModificationException`, porque cada voto vuelve a mezclar la partida en la sesión. Hay
+  que sacar antes la lista de votantes.
+- La rama `DOING_ADDITIONAL_ACTION` queda avisando por el log: es lo primero de S6.
 
-- [ ] `/deletemygames`, `/deletegamebyusername`, `/deleteallgames`, `/sendmessagetoeveryone`,
+### S6 — Poderes ejecutivos y veto (2 jornadas) ✅ HECHA
+
+- [x] `sh_action` como menú cuando hay más de un poder que elegir, y como disparador de espiar el
+      mazo (ver más abajo: el caso de las 5 leyes fascistas resultó no ser un menú).
+- [x] `INVESTIGATE_LOYALTY`, `SPECIAL_ELECTION`, `POLICY_PEEK`, `EXECUTION`, `ENABLE_VETO`.
+- [x] Propuesta y resolución de veto.
+
+**Aceptación:** ✅ **67 tests** en el módulo (13 nuevos). Las cuatro victorias están cubiertas:
+5 liberales en `RoundFlowTest` (S5), y 6 fascistas, Hitler ejecutado y Hitler canciller en
+`PowerFlowTest`. Cada poder tiene su test, y los dos que revelan algo —investigar y espiar— tienen
+además el suyo comprobando que el resultado **solo** aparece en el privado del presidente
+(`investigatingRevealsThePartyOnlyToThePresident`, `peekingShowsTheLawsOnlyToThePresident`), más
+`noPowerIsEverOfferedOrRevealedInTheGroup` recorriendo toda la partida.
+
+Decisiones y hallazgos de la fase:
+
+- **Espiar el mazo necesita un botón aunque no elija nada.** Era el poder que el plan daba por
+  automático, y no puede serlo: el motor comprueba quién actúa contra el usuario de la sesión (D6),
+  y la sesión de quien acaba de promulgar es la del **canciller**. Sin un `sh_action__POLICY_PEEK`
+  en el privado del presidente, el bot no tiene con qué disparar `peekTopLaws` en su nombre.
+- **`ENABLE_VETO` sí es automático, y por eso el caso de las 5 leyes fascistas no es un menú.** Con
+  cinco leyes el motor devuelve `[EXECUTION, ENABLE_VETO]`, pero el veto ya lo ha activado él solo
+  dentro de `chancellorSelectsLaw`: no hay nada que pulsar. Se cae de la lista antes de decidir si
+  hace falta menú —solo se anuncia en el grupo— y al presidente se le ofrece la ejecución a secas.
+  Ofrecerlo como botón habría dejado la ronda colgada en `DOING_ADDITIONAL_ACTION` para siempre,
+  porque no hay método de motor que llamar. El menú de `sh_action` queda implementado igualmente:
+  es una jugada de dos líneas y evita que un cambio de reglas lo convierta en un agujero.
+- **El veto aceptado es un gobierno fallido, no un final de ronda distinto.** El motor deja la
+  ronda en `CHANCELLOR_REJECTED`, el mismo estado que un voto perdido, así que el bot reutiliza el
+  camino de S5 tal cual: contador +1 a mano (el motor no lo mueve hasta el `nextRound` siguiente) y
+  botón de ronda siguiente.
+- **Rechazado el veto, el canciller no puede volver a proponerlo.** El motor sí lo permitiría
+  —vuelve a `CHANCELLOR_SELECTING_LAW`, que es el estado que `proposeVeto` acepta—, así que quien
+  lo impide es el bot: al reabrir las dos leyes ya no pinta el botón de vetar.
+- **Los nombres se leen antes de llamar al motor.** Investigar, ejecutar y la elección especial
+  vuelven a mezclar la partida en la sesión de Hibernate; leer `getUser().getName()` después es
+  pedir problemas, la misma trampa que ya salió en S5 con la lista de votantes.
+- **El tablero hay que repintarlo tras una ejecución** aunque no cambie ninguna ley: cuenta los
+  jugadores vivos.
+- **Dos tags nuevos** (`SH_POWER_PEEK_CONFIRM`, `SH_PRESIDENT_USING_POWER`), que salen del botón de
+  espiar y de dejar dicho en el grupo que la ronda está esperando al presidente. Total: 144.
+- **Los tests fuerzan el mazo por tipo, no solo a liberal.** Llegar a un poder concreto exige un
+  número exacto de leyes fascistas *y* un número exacto de jugadores sentados, así que el soporte
+  de S5 se generalizó a `PlayedGameTest` (`forceLaws(tipo)`, `enactFascistLaws(n)`,
+  `resolvePendingPower()`) y hay dos mesas: siete jugadores para investigar/elección especial y
+  cinco para espiar el mazo, que con siete no sale nunca.
+- **`resolvePendingPower()` lee el poder del propio teclado que recibió el presidente**, en vez de
+  saber de antemano cuál toca. Así el test que solo quiere avanzar de ronda comprueba de paso que
+  el bot ofrece el poder correcto en el privado correcto.
+- **Hitler se coloca a mano para probar su victoria como canciller**: el reparto de roles es
+  aleatorio y la condición depende de quién es Hitler exactamente. Por lo mismo, el resto de tests
+  nomina siempre a alguien que no lo sea, o la partida terminaría antes de tiempo.
+
+**Hueco del motor detectado y arreglado sobre la marcha:** `setRoundPresident` rotaba por
+`joinOrder` sin mirar si el jugador seguía vivo, así que tras una ejecución podía tocarle presidir a
+un muerto. No rompía nada visible —el resto del motor seguía funcionando y los tests pasaban— pero
+es una regla mal implementada: un ejecutado está fuera de la partida para siempre. La rotación
+ahora salta a los muertos dando la vuelta a la mesa (`nextLivingPresident`), y el contador
+`lastRegularPresidentJoinOrder` se fija con quien acaba presidiendo de verdad, no con la casilla que
+tocaba. Dos tests nuevos en `SHServiceTest`, uno de ellos con la vuelta pasando por el final de la
+mesa. **87 tests** en `SH-Engine`.
+
+### S7 — Administración, ayuda y endurecimiento (1–2 jornadas) ✅ HECHA (menos la prueba en vivo)
+
+- [x] `/deletemygames`, `/deletegamebyusername`, `/deleteallgames`, `/sendmessagetoeveryone`,
       `/toggleglobalmessages`.
-- [ ] Frontera de error única (patrón `guarded(...)` + `ErrorMessageResolver`) — **desde el
-      principio**, no como refactor final: en CAH sustituir la escalera de ~57 `catch` fue trabajo
-      aparte.
-- [ ] Repaso de mensajes largos, teclados de más de 8 botones y jugadores sin `@alias`.
-- [ ] Prueba manual con un bot real: long polling primero, webhook después.
+- [x] Frontera de error única (patrón `guarded(...)` + `ErrorMessageResolver`) — se hizo desde S3,
+      como estaba previsto, y en esta fase se cerró el único hueco que le quedaba (ver abajo).
+- [x] Repaso de mensajes largos, teclados de más de 8 botones y jugadores sin `@alias`.
+- [ ] **Prueba manual con un bot real: long polling primero, webhook después.** Sigue pendiente:
+      necesita un token de verdad y una persona delante, no se puede cerrar desde aquí. Es el mismo
+      punto que sigue abierto en CAH-Telegram (fase F7 de su plan).
 
-### S8 — Documentación y cierre (½ jornada)
+**Aceptación:** ✅ **82 tests** en `SH-Telegram` (15 nuevos) y **89** en `SH-Engine` (2 nuevos).
 
-- [ ] `SH-Telegram/docs/CODEBASE_MAP.md`.
-- [ ] Actualizar el mapa raíz (SH-Engine deja de ser "sin consumidor") y el `CLAUDE.md` raíz.
-- [ ] Anotar en este plan lo que se descubrió por el camino, como se hizo en el de CAH.
+Decisiones y hallazgos de la fase:
+
+- **Comprobar el rol va dentro del `guarded`, no delante.** Puesto antes, como en CAH, la excepción
+  se escapa a la capa de arriba, que solo la apunta en el log: quien teclea un comando de
+  administración sin serlo no ve absolutamente nada. Dentro, `ErrorMessageResolver` la traduce y se
+  le contesta. Cuatro tests fijan que los cinco comandos rechazan a quien no administra.
+- **El motor tenía que dejar pasar a quien administra.** `checkSessionUserIsCreator` solo aceptaba
+  al creador, así que `/deletegamebyusername` y `/deleteallgames` habrían fallado partida por
+  partida —y en el caso de borrarlas todas, en silencio, porque el bucle traga la excepción para no
+  parar en la primera—. Ahora `SecurityUtils.isAdmin()` es una salida temprana de esa comprobación,
+  que es exactamente lo que "administrador" quiere decir aquí, y sigue siendo el motor quien impone
+  quién puede actuar (D6). Dos tests en `SHServiceTest`: uno por cada lado de la puerta.
+- **La difusión mide el mensaje antes de salir**, y no por pulcritud: cada envío que Telegram
+  rechaza marca ese chat como inactivo, así que un mensaje vacío —`/sendmessagetoeveryone` sin
+  texto— o de más de 4096 caracteres daría de baja a toda la base de datos de una tacada. Con el
+  freno, se avisa a quien administra y no sale nada. Tag nuevo `ERROR_MESSAGE_TOO_LONG`; total 145.
+- **El interruptor de la difusión vive en memoria y por proceso.** Es un freno de mano para cortar
+  los envíos sin reiniciar, no una preferencia que haya que recordar entre arranques.
+- **El endurecimiento se escribió como test, no como repaso.** `HardeningTest` monta la mesa más
+  grande que admite el juego (diez jugadores), juega hasta la victoria fascista y comprueba sobre
+  todo lo enviado que ningún mensaje pasa de 4096 caracteres —el más largo es el revelado final de
+  roles, una línea por jugador— y que ninguna fila de teclado pasa de ocho botones. Los teclados ya
+  estaban bien: los números van de tres en tres y los jugadores de uno en uno.
+- **Lo de los jugadores sin `@alias` ya lo resolvía `Commons-Telegram`**, pero no había nada que lo
+  fijara: `usernameOf` cae a `tg:<id>` y el nombre visible se compone del nombre y los apellidos.
+  Ahora hay una mesa con un jugador sin alias que lo comprueba de punta a punta, incluido que no le
+  queda ningún botón en blanco.
+
+**Bug encontrado en `CAH-Telegram` y arreglado también:** el mismo hueco existía en `CAH-Engine`, y
+allí llevaba tiempo mordiendo en producción — `/deletegamebyusername` y `/deleteallgames` no podían
+borrar nada que no fuera del propio administrador, y el segundo además fallaba en silencio. Se le
+aplicó el mismo juego de arreglos (salida de administrador en `checkSessionUserIsCreator`,
+`requireAdmin()` dentro del `guarded` en los cuatro comandos y el freno de la difusión, que allí
+podía dar de baja a toda la base de datos), más el `AdminFlowTest` que no tenía.
+Detalle en [CAH-Telegram-PLAN.md](CAH-Telegram-PLAN.md).
+
+### S8 — Documentación y cierre (½ jornada) ✅ HECHA
+
+- [x] `SH-Telegram/docs/CODEBASE_MAP.md`, y también su `CLAUDE.md`, que era el único módulo del
+      reactor sin ninguno de los dos.
+- [x] Mapa raíz y `CLAUDE.md` raíz: el reactor pasa de "cinco submódulos y una aplicación" a **seis
+      submódulos y dos aplicaciones**, `SH-Engine` deja de estar "sin capa de bot" y `CAH-Telegram`
+      deja de ser dueño del "esquema canónico" —ahora cada aplicación tiene el suyo, en su propia
+      base de datos—. `SH-Telegram` tiene su sección en la guía de módulos.
+- [x] Anotado en este plan lo que se descubrió por el camino, fase a fase.
+
+Lo que se corrigió de paso, porque el repaso lo destapó:
+
+- **El `CLAUDE.md` de `SH-Engine` describía un motor que ya no existe**: decía que los poderes de
+  investigar, elección especial y espiar "no tienen método que los implemente", que faltaban trozos
+  de la regla del caos y que el andamiaje de tests era copy-paste de CAH. Todo eso lo cerró S1, pero
+  ese fichero es el que se carga solo al trabajar en ese directorio, así que estaba contando la
+  versión de antes a quien viniera después. Reescrito.
+- **El mapa de `CAH-Telegram` situaba sus migraciones en `V3/`** cuando están en `V2/`, y contaba 215
+  tags cuando ya son 216. Corregido, y añadidos los dos gotchas de administración de S7.
+- **El gotcha 19 del mapa raíz** (`setRoundPresident` por `joinOrder` exacto) queda anotado con el
+  arreglo de S6: la rotación ya se salta a los ejecutados.
+
+**Lo único que queda abierto en todo el plan** es la prueba manual contra un bot de Telegram real,
+el mismo punto que sigue abierto en F7 del plan de CAH. No se puede cerrar sin un token y un
+despliegue de verdad.
 
 ---
 
@@ -846,6 +1012,9 @@ ya está hecho y pagado.
 | Módulo | Cambio | Estado |
 |---|---|---|
 | `SH-Engine` | `GameResultEnum` + `Game.result`, `getResult`/`getWinners`, comprobación de actor, cascade en los mazos (R1), y el arreglo de los fixtures DBUnit | ✅ hecho en S1 |
+| `SH-Engine` | `setRoundPresident` salta a los jugadores ejecutados al rotar la presidencia (hallazgo de S6) | ✅ hecho en S6 |
+| `SH-Engine` | `checkSessionUserIsCreator` deja pasar a quien administra, sin lo cual los comandos de borrado masivo no pueden existir | ✅ hecho en S7 |
+| `CAH-Engine` / `CAH-Telegram` | Mismo hueco de administración, arreglado igual: salida de administrador, `requireAdmin()` dentro del `guarded` y `AdminFlowTest` nuevo | ✅ hecho en S7 |
 | `Commons-Telegram` | **Ninguno** (§5.2) — se reutiliza entero | ✅ confirmado |
 | `Commons-Engine` | Ninguno | — |
 | `CAH-Engine` | Ninguno de negocio; su BD no se toca (D1). Sí el arreglo de los fixtures DBUnit descrito en S1 (`CAHServiceTest` + `cahschema.dtd`) | ✅ hecho, 207 tests recuperados |
