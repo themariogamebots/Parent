@@ -299,19 +299,25 @@ En `GameConfig` (`cah.game.*`) y en `application.properties` de `CAH-Telegram`.
 
 ---
 
-## 9. Evolución: aprender qué cartas ganan (no se implementa ahora)
+## 9. Evolución: aprender qué cartas ganan
 
-En esta versión **solo se registra** (la IA sigue siendo aleatoria):
+**Implementado (F5): el histórico.** La IA sigue siendo aleatoria, pero cada votación cerrada deja su rastro:
 
 ```
-round_result(id UUID, dictionary_id, black_card_id, white_card_id, votes INT, won BOOLEAN,
-             votation_mode, ai_player BOOLEAN, created_at)
+round_result(id, creation_date, dictionary_id, black_card_id, white_card_id,
+             votes, ai_votes, won, candidates, votation_mode, ai_player)
 ```
 
-Una fila por carta jugada, escrita al cerrar la votación (antes de que `nextRound` borre la ronda). La tabla se crea en `V2.1.0_3__Round_results.sql` (§3.3).
-
-La entidad `RoundResult` vive en `CAH-Engine` y se añade a la lista `ENTITIES` de `SchemaGenerator`. Sus FKs a `card` y `dictionary` tienen que ser `on delete set null`, o `cascade`, para que borrar un diccionario no falle. Esto se decide al escribir la entidad. La columna
-`ai_player` sirve para descontar o excluir los votos de IA cuando se entrene.
+- Una fila por carta jugada. La escribe `RoundResultService.recordRound` desde `CAHServiceImpl.doVoteCard` al
+  cerrarse la votación, antes de que `nextRound` borre la ronda con sus cartas y votos.
+- `ai_votes` y `ai_player` sirven para descontar o excluir lo que hagan las IAs al entrenar, porque si no,
+  la IA aleatoria ensuciaría los datos. `candidates` es el número de cartas que compitieron: ganar entre dos
+  no vale lo mismo que entre ocho.
+- **Sin claves ajenas.** Cartas y diccionarios se pueden borrar (`CardService.delete`, `DictionaryService.delete`),
+  y el histórico no tiene por qué perderse con ellos ni impedir que se borren. Van como ids sueltos.
+- Índices por `(black_card_id, white_card_id)` y por `white_card_id`, para las dos consultas de la estrategia
+  futura. `RoundResultService.getByBlackCardId` es la primera.
+- Migración `V2.1.0_3__Round_results.sql`, con el DDL copiado de lo que genera `SchemaGenerator`.
 
 Estrategia futura (`StatsAIPlayerStrategy`), como orientación:
 - Puntuación de una blanca = combinación de su tasa de victoria **global** y la del **par** negra×blanca
@@ -343,13 +349,13 @@ Cerradas el 2026-10-08.
 | F2 | `Player.ai`, `AIPlayerStrategy`, `RandomAIPlayerStrategy`, `addAIPlayer`/`removeAIPlayer`, refactor `do*`, acciones de la IA (§5.3), reglas de §5.4, errores | `CAHServiceTest`: los tres modos con 1–2 IAs hasta el final de la partida; quórum de borrado; mínimo de humanos; limpieza de `User`; `RandomAIPlayerStrategy` con semilla (nunca vota la suya) |
 | F3 | Migraciones V2.1.0 (h2 + mariadb): columna `ai` y tags; `EXPECTED_TAGS` | `SchemaBaselineTest`, `SchemaBaselineMariaDbTest` |
 | F4 | Callbacks, menú, `ENDING` en `playerPlayCardQuery`, filtros de `chatIdOf`, cartas en el grupo en todos los modos y orden barajado (§6.4) | `CCLHApplicationServiceTest` (conjunto `CALLBACKS`), `GameFlowTest`: partida completa con IAs en `DEMOCRACY` y `CLASSIC`; `CLASSIC` sin IA edita el mensaje del grupo al abrir la votación; grupo y privado muestran el mismo orden |
-| F5 | `round_result`: entidad, migración `V2.1.0_3`, DAO, escritura al cerrar la votación | Test de motor que comprueba las filas tras una ronda |
+| F5 ✔ | `round_result`: entidad, migración `V2.1.0_3`, DAO, escritura al cerrar la votación | `RoundResultServiceTest`; en `CAHServiceTest` las filas tras una ronda, con y sin IA; en `GameFlowTest` las filas tras una votación |
 
 Todo con `mvn -Ptest test`. **No** `mvn -Pcheck`.
 
 ---
 
-## 12. Hallazgos durante la implementación (F4)
+## 12. Hallazgos durante la implementación (F4 y F5)
 
 Al probar una partida completa de punta a punta salieron tres problemas que el spec no preveía:
 
@@ -368,4 +374,10 @@ Al probar una partida completa de punta a punta salieron tres problemas que el s
    quedaba y la partida ya no se podía borrar (FK). `removeCardFromHand` borra la carta de forma explícita, y
    `insertWhiteCardsIntoPlayerHand` usa persist en lugar de merge, para que las cartas de la mano sean las instancias
    gestionadas.
+4. **En un empate, el grupo podía ver una ganadora distinta de la que se llevaba el punto (bug previo).**
+   `getMostVotedCard` desempataba con un `SecureRandom` compartido. El motor lo llamaba para dar el punto y
+   `endRound` volvía a llamarlo para anunciar la ganadora, así que eran dos tiradas independientes. Ahora el
+   desempate ordena las cartas empatadas por id y elige con una semilla sacada del id de la ronda: sigue siendo
+   aleatorio entre rondas, pero siempre igual para la misma ronda. Además, `won` en `round_result` coincide con
+   lo que se anuncia.
 
