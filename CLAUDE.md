@@ -51,9 +51,12 @@ llevándose por delante el formato de todo el reactor.
   **Son dos bases de datos distintas**: `cah.models.game.Game` y `sh.models.Game` mapearían a la
   misma tabla `game` si compartieran una.
 - **Todo texto visible es un tag i18n** resuelto contra la tabla `tag`, no un fichero `.properties`.
-  Un literal español en el código hace fallar un test. Los tags nuevos van en el
-  `V*.0.0_2__Languages_and_tags.sql` de la aplicación que toque (`V2` en CAH, `V1` en SH),
-  en los dos idiomas y los dos dialectos, y hay que subir el contador de `SchemaBaselineTest`.
+  Un literal español en el código hace fallar un test. Los tags nuevos van en los dos idiomas y
+  los dos dialectos, y hay que subir el contador de `SchemaBaselineTest`.
+- **La V2 de CAH está desplegada**: sus migraciones no se tocan (Flyway compara checksums). Los
+  cambios de esquema y los tags nuevos de CAH van en una versión nueva (`V2.1.0_*`), con el DDL
+  escrito a mano a partir de la diferencia que saca `SchemaGenerator`. En SH los tags van en
+  `V1.0.0_2__Languages_and_tags.sql`.
 - **Las claves de comando y de `callback_data` son contrato con lo ya desplegado**: Telegram guarda
   los botones dentro de los mensajes para siempre, así que renombrar una clave rompe partidas en curso.
   Hay tests que fijan los conjuntos exactos.
