@@ -55,7 +55,8 @@ llevándose por delante el formato de todo el reactor.
   los dos dialectos, y hay que subir el contador de `SchemaBaselineTest`.
 - **La V2 de CAH está desplegada**: sus migraciones no se tocan (Flyway compara checksums). Los
   cambios de esquema y los tags nuevos de CAH van en una versión nueva (`V2.1.0_*`), con el DDL
-  escrito a mano a partir de la diferencia que saca `SchemaGenerator`. En SH los tags van en
+  escrito a mano a partir de la diferencia que saca `SchemaGenerator`. `DeployedMigrationsTest` fija
+  el SHA-256 de cada migración desplegada: al desplegar una versión nueva, se añaden sus ficheros. En SH los tags van en
   `V1.0.0_2__Languages_and_tags.sql`.
 - **Las claves de comando y de `callback_data` son contrato con lo ya desplegado**: Telegram guarda
   los botones dentro de los mensajes para siempre, así que renombrar una clave rompe partidas en curso.
